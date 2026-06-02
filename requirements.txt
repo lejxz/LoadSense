@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic
+pandas
+scikit-learn
+xgboost
+prophet
+websockets
+python-dotenv
+ultralytics

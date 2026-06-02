@@ -1,64 +1,65 @@
+# LoadSense Prototype Task Breakdown (Software-Only)
+
+> Hardware-free hackathon sprint. The edge layer is simulated via mock data and laptop inference.
 
 ---
 
-## LoadSense Prototyping — Task Breakdown
-
-### Part 1: Backend Foundation
-**Build before anything else — everything depends on this.**
-
-- Set up FastAPI server with basic routes
-- Define the data schema for GPS + occupancy payloads
-- Set up the cloud database (PostgreSQL or SQLite for prototype)
-- Accept and store incoming telemetry from the edge device
-- Test with mock data (no real hardware needed yet)
+## Legend
+- `[SIMULATED]` — replaces hardware with mock data
+- `[CORE LOGIC]` — actual model/backend code
+- `[UI/DEMO]` — frontend & visualization
+- `[WRAP-UP]` — polish & pitch
 
 ---
 
-### Part 2: ETA + Demand Forecasting Models
-**Once data flows in, train the models.**
+## Phase 1 — Foundation: Mock Data + Project Setup
 
-- Prepare training data (OpenStreetMap + historical GPS logs + OpenWeatherMap)
-- Train the Gradient Boosting (XGBoost) ETA model
-- Train the Prophet demand forecasting model
-- Expose both as FastAPI endpoints
-- Validate output with explicit confidence bounds during cold-start
+1. `[WRAP-UP]` Set up Python project structure: `edge/`, `cloud/`, `app/` folders with a shared `requirements.txt`
+2. `[SIMULATED]` Write a **mock telemetry generator** — a script that outputs fake GPS coordinates + occupancy counts (0–16) to a JSON/WebSocket stream, simulating the Raspberry Pi feed
+3. `[CORE LOGIC]` Define occupancy thresholds in a config: Green ≤50%, Yellow ≤75%, Red ≤100%, Blinking Red >100%
+4. `[SIMULATED]` Generate or download a CSV of **synthetic historical occupancy logs** (timestamps + route + count) — at least 500 rows — to train ETA and demand models later
 
 ---
 
-### Part 3: Frontend Interfaces
-**Build the user-facing layer on top of working API endpoints.**
+## Phase 2 — Cloud Backend: ETA + Demand Models (FastAPI)
 
-- Commuter mobile app (React Native)
-  - Stop-level ETA display
-  - Occupancy status (Green/Yellow/Red/Blinking Red)
-  - AI chatbot interface (connect to LLM API)
-  - Tile-based static map (not full interactive — low-RAM target)
-- Operator dashboard
-  - Fleet dispatching alerts
-  - Demand forecast view
-  - Incident log
+5. `[CORE LOGIC]` Train a **Gradient Boosting ETA model** (XGBoost/scikit-learn) on the synthetic CSV — features: GPS stop index, time-of-day, simulated traffic factor. Export as `.pkl`
+6. `[CORE LOGIC]` Train a **Facebook Prophet demand forecast model** on the same CSV — output: predicted load per stop per hour. Export forecasts as a JSON file for the dashboard
+7. `[CORE LOGIC]` Build a **FastAPI server** with three endpoints: `POST /telemetry` (receives mock GPS+occupancy), `GET /eta/{stop_id}`, `GET /demand`
+8. `[CORE LOGIC]` Add a simple **route deviation check**: if the incoming GPS coordinate deviates >200m from the expected polyline, flag it as an anomaly in the response JSON
 
 ---
 
-### Part 4: End-to-End Integration + Edge Case Handling
-**Connect everything and stress test it.**
+## Phase 3 — Edge Simulation: YOLOv8-nano Inference (Laptop/Colab)
 
-- Connect edge device telemetry to the live backend
-- Integrate GPIO LED state into the full data loop
-- Test GPS dropout handling (dead-reckoning fallback)
-- Test low-light detection failure cases
-- Run Pytest + GitHub Actions for automated checks
-- Fix breaking points between edge, cloud, and frontend
+9. `[CORE LOGIC]` Run **YOLOv8-nano on a sample video** (a crowd/street clip from YouTube or your own footage) using Ultralytics Python SDK — count detected persons per frame and output counts to a CSV. This is your "edge AI" demo evidence
+10. `[CORE LOGIC]` Write a **bidirectional line-crossing counter** script: define a horizontal line across the video frame, count persons crossing up vs. down, derive a running passenger count
+11. `[SIMULATED]` Map the running count to the occupancy tier (Green/Yellow/Red/Blinking Red) and log state changes — this output feeds the LED simulation in the frontend
 
 ---
 
-### Part 5: Demo Video + Pitch Preparation
-**Last — only after the prototype is stable.**
+## Phase 4 — Frontend Prototype: Commuter App + Operator Dashboard
 
-- Record a demo walkthrough (edge AI counting → LED output → app ETA → operator dashboard)
-- Prepare slides if needed
-- Write the pitch script focused on the problem-solution fit from Section 1
+12. `[UI/DEMO]` Build a **commuter web app** (React Native Web or plain React) with: a route map (Leaflet.js), stop-level ETA from the FastAPI endpoint, and occupancy badge per vehicle
+13. `[UI/DEMO]` Add an **LED strip visual** on the app — a horizontal bar that animates Green → Yellow → Red → Blinking Red based on live occupancy state from the mock telemetry stream
+14. `[UI/DEMO]` Build an **operator dashboard** (separate page/tab): fleet list with occupancy status, demand forecast chart (Recharts/Chart.js from your Prophet output), and anomaly alerts panel
+15. `[UI/DEMO]` Add an **NLP chatbot widget** (call an LLM API — OpenAI or Claude) that answers commuter queries like "Which jeepney is least crowded for Route 04-L right now?" using occupancy + ETA context injected into the system prompt
 
 ---
 
-**Honest note:** Part 4 will likely take the longest. Integration bugs between the edge device, FastAPI server, and frontend are where most prototype time gets consumed. Do not leave Part 4 for the last two days before the deadline.
+## Phase 5 — Integration + Demo: End-to-End Run + Pitch Video
+
+16. `[CORE LOGIC]` Wire everything together: mock telemetry script → FastAPI → React dashboard running simultaneously. Confirm occupancy updates reflect in LED, ETA, and operator dashboard in near-real-time
+17. `[WRAP-UP]` Run the YOLOv8 video through your counter, narrate the output as "what would happen on a real jeepney" — screenshot or screen-record the person count changing tiers
+18. `[WRAP-UP]` Record the **demo video**: show the commuter app, the live LED simulation, the operator dashboard (with demand forecast), and a chatbot query — voice-over or on-screen captions
+19. `[WRAP-UP]` Prepare pitch slides: Problem → Solution → Architecture diagram → Live demo screenshots → SDG alignment → ASEAN scalability. Keep to 5–7 slides
+
+---
+
+## Notes
+
+- **Start with Phase 1 no matter what.** The mock telemetry generator is the backbone — Phases 2, 3, and 4 all depend on data flowing.
+- **Phase 3 can run in parallel with Phase 2** if you split the team — YOLO inference and model training don't block each other.
+- **The LED strip visual (Step 13) is your most impressive demo moment** — it replaces hardware and makes the prototype feel real to judges.
+- **For the NLP chatbot (Step 15)**, inject current occupancy JSON into the system prompt — no RAG needed. Example: *"Current fleet state: Route 04-L, Vehicle J-214, occupancy: Red (14/16 passengers), ETA to Colon: 7 min."*
+- **Don't build a mobile app** — a responsive React web app demos just as well in a browser and is far faster to build.
