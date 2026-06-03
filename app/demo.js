@@ -8,6 +8,8 @@
     database: {},
     incidents: [],
     selectedRoute: "04L",
+    maps: {},
+    mapLayers: {},
   };
 
   const tierCopy = {
@@ -126,6 +128,56 @@
   function drawMap(containerId, routeFilter) {
     const el = qs(containerId);
     if (!el) return;
+    // If Leaflet is available, render an interactive map; else fall back to SVG renderer
+    if (typeof L !== 'undefined') {
+      // initialize map if needed
+      if (!state.maps[containerId]) {
+        // default center near Cebu
+        const map = L.map(containerId, { zoomControl: false }).setView([14.5992, 120.9840], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+        }).addTo(map);
+        state.maps[containerId] = map;
+        state.mapLayers[containerId] = L.layerGroup().addTo(map);
+      }
+      const map = state.maps[containerId];
+      const layerGroup = state.mapLayers[containerId];
+      // clear previous layers
+      layerGroup.clearLayers();
+
+      const routes = routeFilter ? state.routes.filter(route => route.route === routeFilter) : state.routes;
+      const pointsAll = [];
+      // draw route polylines
+      for (const route of routes) {
+        const latlngs = (route.polyline || []).filter(p => Number(p.latitude) && Number(p.longitude)).map(p => [Number(p.latitude), Number(p.longitude)]);
+        if (latlngs.length) {
+          L.polyline(latlngs, { color: '#2f5f98', weight: 3 }).addTo(layerGroup);
+          pointsAll.push(...latlngs);
+        }
+      }
+      // draw vehicle markers
+      const vehicles = state.vehicles.filter(vehicle => !routeFilter || vehicle.route === routeFilter).filter(vehicle => Number(vehicle.latitude) && Number(vehicle.longitude));
+      for (const vehicle of vehicles) {
+        const lat = Number(vehicle.latitude);
+        const lon = Number(vehicle.longitude);
+        const color = tierClass(vehicle.tier) === 'green' ? '#16865d' : tierClass(vehicle.tier) === 'yellow' ? 'var(--amber)' : '#c93b31';
+        const marker = L.circleMarker([lat, lon], { radius: 6, color: '#fff', weight: 1, fillColor: color, fillOpacity: 1 });
+        marker.bindTooltip(`${escapeHtml(vehicle.vehicle_id)} (${escapeHtml(vehicle.route)})` , { permanent: false });
+        marker.addTo(layerGroup);
+        pointsAll.push([lat, lon]);
+      }
+      // adjust view to bounds if we have points
+      if (pointsAll.length) {
+        try {
+          const bounds = L.latLngBounds(pointsAll);
+          map.fitBounds(bounds.pad ? bounds.pad(0.2) : bounds, { maxZoom: 16 });
+        } catch (e) {
+          // ignore
+        }
+      }
+      return;
+    }
+    // Fallback: original SVG renderer
     const routes = routeFilter ? state.routes.filter(route => route.route === routeFilter) : state.routes;
     const bounds = routeBounds(routes.length ? routes : state.routes);
     const routeLines = routes.map(route => {
