@@ -3,18 +3,6 @@
 
 ---
 
-## Team Information
-
-| Field | Details |
-|---|---|
-| **Team Name** | USJR - FlowerBoys ASEAN |
-| **Institution** | University of San Jose-Recoletos |
-| **Country** | Philippines |
-| **Track** | ✅ Smart Cities |
-| **Team Leader** | Lejuene Delantar — lejuene.delantar.24@usjr.edu.ph — +639333210265 |
-
----
-
 ## Section 1: Executive Summary (Problem-Solution Fit)
 
 Public transit in ASEAN cities — particularly Cebu, Philippines — operates with minimal real-time visibility on either side of the vehicle door. Commuters cannot determine a vehicle's occupancy before it arrives, nor predict arrival times. Drivers routinely exceed legal passenger capacity while operators lack demand data for efficient fleet allocation. Traffic congestion costs the Philippine economy PHP 3.5 billion daily in lost productivity, a crisis worsened by absent live monitoring that enables illegal overloading (*sabit*) and weakens safety compliance enforcement (JICA, 2018; LTFRB, 2024). In Cebu, commuters already report peak-period wait times exceeding 20 minutes, and existing transit technology consistently bypasses low-income passengers who depend on jeepneys most.
