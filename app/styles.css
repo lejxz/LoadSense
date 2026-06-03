@@ -215,6 +215,11 @@ input, select {
 }
 .tab-panel.active { display: block; }
 
+/* Make map tab full-screen within phone frame */
+.tab-panel#mapTab .live-map {
+  height: calc(100vh - 280px);
+}
+
 .hero-card, .quick-grid article, .vehicle-card, .route-card, .chat-header {
   background: var(--panel);
   border: 1px solid var(--line);

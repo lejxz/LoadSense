@@ -163,8 +163,22 @@
       for (const route of routes) {
         const latlngs = (route.polyline || []).filter(p => Number(p.latitude) && Number(p.longitude)).map(p => [Number(p.latitude), Number(p.longitude)]);
         if (latlngs.length) {
-          L.polyline(latlngs, { color: '#2f5f98', weight: 3 }).addTo(layerGroup);
+            const polyline = L.polyline(latlngs, { color: '#2f5f98', weight: 3 }).addTo(layerGroup);
           pointsAll.push(...latlngs);
+            // start and end markers
+            const start = latlngs[0];
+            const end = latlngs[latlngs.length-1];
+            const startMarker = L.circleMarker(start, { radius: 6, color: '#fff', weight: 1, fillColor: '#045c51', fillOpacity: 1 }).bindTooltip('Start');
+            const endMarker = L.circleMarker(end, { radius: 6, color: '#fff', weight: 1, fillColor: '#2f5f98', fillOpacity: 1 }).bindTooltip('End');
+            startMarker.addTo(layerGroup);
+            endMarker.addTo(layerGroup);
+            // if map is mobile map, allow clicking polyline to set as destination
+            if (containerId === 'mobileMap') {
+              polyline.on('click', () => {
+                state.selectedRoute = (route.route || route.name);
+                renderMobile();
+              });
+            }
         }
       }
       // draw vehicle markers
@@ -204,6 +218,28 @@
       } else {
         // nothing to show - ensure map resizes correctly when visible
         setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 150);
+      }
+      // map click on mobile map: set destination and suggest best PUV
+      if (containerId === 'mobileMap') {
+        map.off('click', map._ls_click_handler || (() => {}));
+        map._ls_click_handler = function (e) {
+          const lat = e.latlng.lat, lon = e.latlng.lng;
+          state.lastPosition = { latitude: lat, longitude: lon };
+          const nearest = findNearestRoute(lat, lon);
+          if (nearest) state.selectedRoute = nearest;
+          // find best vehicle for selected route
+          refreshData().then(() => {
+            renderMobile();
+            const candidates = state.vehicles.filter(v => v.route === state.selectedRoute).sort(vehicleSort);
+            if (candidates.length) {
+              const best = candidates[0];
+              L.popup().setLatLng([lat, lon]).setContent(`<b>Suggested PUV</b><br/>${escapeHtml(best.vehicle_id)} - ETA ${best.eta_minutes}m`).openOn(map);
+            } else {
+              L.popup().setLatLng([lat, lon]).setContent('<b>No live PUVs for this route</b>').openOn(map);
+            }
+          });
+        };
+        map.on('click', map._ls_click_handler);
       }
       return;
     }
