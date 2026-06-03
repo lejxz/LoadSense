@@ -1,15 +1,22 @@
+import asyncio
 import sys
 import time
 import json
 import random
 import argparse
-from datetime import datetime
+from datetime import UTC, datetime
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from backend.app.core.config import config_value, default_route, route_polylines
 
 ROUTE_POINTS = {
-    "04L": (14.5992, 120.9840),
-    "08A": (14.5988, 120.9835),
-    "12B": (14.5990, 120.9844),
-    "17C": (14.5986, 120.9838),
+    route: points[0]
+    for route, points in route_polylines().items()
+    if points
 }
 
 
@@ -26,12 +33,12 @@ def make_payload(vehicle_id, route, base_lat, base_lon, occupancy):
         "latitude": base_lat + random.uniform(-0.0005, 0.0005),
         "longitude": base_lon + random.uniform(-0.0005, 0.0005),
         "occupancy": occupancy,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
 def get_base_coordinates(route):
-    return ROUTE_POINTS.get(route, (14.5995, 120.9842))
+    return ROUTE_POINTS.get(route, ROUTE_POINTS[default_route()])
 
 
 def run_stdout(args):
@@ -39,11 +46,13 @@ def run_stdout(args):
     route = args.route
     base_lat, base_lon = get_base_coordinates(route)
     occupancy = args.start
-    while True:
+    sent = 0
+    while args.limit == 0 or sent < args.limit:
         occupancy = max(0, occupancy + random.randint(-2, 3))
         occupancy = min(args.max, occupancy)
         payload = make_payload(vehicle_id, route, base_lat, base_lon, occupancy)
         print(json.dumps(payload), flush=True)
+        sent += 1
         time.sleep(args.interval)
 
 
@@ -55,7 +64,8 @@ def run_http(args):
     base_lat, base_lon = get_base_coordinates(route)
     occupancy = args.start
     url = args.url
-    while True:
+    sent = 0
+    while args.limit == 0 or sent < args.limit:
         occupancy = max(0, occupancy + random.randint(-2, 3))
         occupancy = min(args.max, occupancy)
         payload = make_payload(vehicle_id, route, base_lat, base_lon, occupancy)
@@ -66,6 +76,7 @@ def run_http(args):
                 print("posted", payload["vehicle_id"], "status", resp.status)
         except Exception as e:
             print("http send error:", e, file=sys.stderr)
+        sent += 1
         time.sleep(args.interval)
 
 
@@ -79,7 +90,8 @@ async def run_ws_async(args):
     occupancy = args.start
     url = args.url
     async with websockets.connect(url) as ws:
-        while True:
+        sent = 0
+        while args.limit == 0 or sent < args.limit:
             occupancy = max(0, occupancy + random.randint(-2, 3))
             occupancy = min(args.max, occupancy)
             payload = make_payload(vehicle_id, route, base_lat, base_lon, occupancy)
@@ -90,24 +102,27 @@ async def run_ws_async(args):
                 print("ws ack:", resp)
             except Exception:
                 pass
+            sent += 1
             await asyncio.sleep(args.interval)
 
 
 def run_ws(args):
-    import asyncio
-
     asyncio.run(run_ws_async(args))
 
 
 def parse_args():
     p = argparse.ArgumentParser(description="Mock telemetry generator")
     p.add_argument("--mode", choices=["stdout", "http", "ws"], default="stdout")
-    p.add_argument("--url", default="ws://localhost:8000/ws/telemetry")
-    p.add_argument("--vehicle-id", default="J-001")
-    p.add_argument("--route", default="04L")
-    p.add_argument("--start", type=int, default=0)
-    p.add_argument("--max", type=int, default=16)
-    p.add_argument("--interval", type=float, default=1.0)
+    host = config_value("server", "host", default="127.0.0.1")
+    port = config_value("server", "port", default=8000)
+    api_prefix = config_value("server", "api_prefix", default="/api")
+    p.add_argument("--url", default=f"ws://{host}:{port}{api_prefix}/ws/telemetry")
+    p.add_argument("--vehicle-id", default=config_value("mock_telemetry", "vehicle_id", default="J-001"))
+    p.add_argument("--route", default=default_route())
+    p.add_argument("--start", type=int, default=int(config_value("mock_telemetry", "start_occupancy", default=0)))
+    p.add_argument("--max", type=int, default=int(config_value("mock_telemetry", "max_occupancy", default=16)))
+    p.add_argument("--interval", type=float, default=float(config_value("mock_telemetry", "interval_seconds", default=1.0)))
+    p.add_argument("--limit", type=int, default=int(config_value("mock_telemetry", "stdout_limit", default=0)), help="Number of messages to send; 0 means forever")
     return p.parse_args()
 
 

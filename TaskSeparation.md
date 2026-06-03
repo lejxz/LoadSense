@@ -55,11 +55,3 @@
 19. `[WRAP-UP]` Prepare pitch slides: Problem → Solution → Architecture diagram → Live demo screenshots → SDG alignment → ASEAN scalability. Keep to 5–7 slides
 
 ---
-
-## Notes
-
-- **Start with Phase 1 no matter what.** The mock telemetry generator is the backbone — Phases 2, 3, and 4 all depend on data flowing.
-- **Phase 3 can run in parallel with Phase 2** if you split the team — YOLO inference and model training don't block each other.
-- **The LED strip visual (Step 13) is your most impressive demo moment** — it replaces hardware and makes the prototype feel real to judges.
-- **For the NLP chatbot (Step 15)**, inject current occupancy JSON into the system prompt — no RAG needed. Example: *"Current fleet state: Route 04-L, Vehicle J-214, occupancy: Red (14/16 passengers), ETA to Colon: 7 min."*
-- **Don't build a mobile app** — a responsive React web app demos just as well in a browser and is far faster to build.

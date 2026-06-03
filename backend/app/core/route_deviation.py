@@ -1,16 +1,13 @@
 import math
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Tuple
+
+from backend.app.core.config import config_value, route_polylines
 
 
 RoutePoint = Tuple[float, float]
 
 
-ROUTE_POLYLINES: Dict[str, list[RoutePoint]] = {
-    "04L": [(14.5992, 120.9840), (14.6001, 120.9850), (14.6009, 120.9862), (14.6017, 120.9870)],
-    "08A": [(14.5988, 120.9835), (14.5996, 120.9846), (14.6004, 120.9854), (14.6011, 120.9864)],
-    "12B": [(14.5990, 120.9844), (14.5999, 120.9855), (14.6007, 120.9866), (14.6014, 120.9875)],
-    "17C": [(14.5986, 120.9838), (14.5994, 120.9849), (14.6002, 120.9858), (14.6010, 120.9868)],
-}
+ROUTE_POLYLINES: Dict[str, list[RoutePoint]] = route_polylines()
 
 
 def _project(lat: float, lon: float, origin_lat: float) -> tuple[float, float]:
@@ -50,7 +47,9 @@ def distance_to_route_meters(latitude: float, longitude: float, route: str) -> f
     return min(distances)
 
 
-def detect_route_deviation(latitude: float, longitude: float, route: str, threshold_meters: float = 200.0) -> dict:
+def detect_route_deviation(latitude: float, longitude: float, route: str, threshold_meters: float | None = None) -> dict:
+    if threshold_meters is None:
+        threshold_meters = float(config_value("route_monitoring", "deviation_threshold_meters", default=200.0))
     deviation_meters = round(distance_to_route_meters(latitude, longitude, route), 2)
     return {
         "route": route,

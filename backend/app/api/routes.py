@@ -1,36 +1,39 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+import json
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from backend.app.core.occupancy import DEFAULT_CAPACITY, get_occupancy_tier
-from backend.app.core.route_deviation import detect_route_deviation
+from backend.app.core.config import default_route, get_config
+from backend.app.core.compat import model_to_dict, validate_model
 from backend.app.core.phase2 import load_demand_forecast, predict_eta_details
+from backend.app.core.routes import list_routes
+from backend.app.core.state import fleet_store
 
 router = APIRouter()
 
 
 class Telemetry(BaseModel):
     vehicle_id: str
-    route: str = "04L"
+    route: str = default_route()
     latitude: float
     longitude: float
     occupancy: int
     timestamp: str
+    speed_kph: Optional[float] = None
+    heading: Optional[float] = None
+    signal_quality: Optional[str] = None
+
+
+class ChatQuery(BaseModel):
+    route: str = default_route()
+    query: str
 
 
 @router.post("/telemetry")
 def receive_telemetry(t: Telemetry):
-    # placeholder: accept telemetry and return current tier
-    occupancy = t.occupancy
-    tier = get_occupancy_tier(occupancy, DEFAULT_CAPACITY)
-    deviation = detect_route_deviation(t.latitude, t.longitude, t.route)
-
-    return {
-        "vehicle_id": t.vehicle_id,
-        "route": t.route,
-        "tier": tier,
-        "occupancy": occupancy,
-        "route_deviation": deviation,
-    }
+    state = fleet_store.upsert_telemetry(t)
+    return {"status": "accepted", "vehicle": model_to_dict(state), "summary": fleet_store.summary()}
 
 
 @router.websocket("/ws/telemetry")
@@ -39,8 +42,12 @@ async def websocket_telemetry_endpoint(websocket: WebSocket):
     try:
         while True:
             text = await websocket.receive_text()
-            # For now just echo back acknowledgement
-            await websocket.send_text(f"received {len(text)} bytes")
+            try:
+                payload = validate_model(Telemetry, json.loads(text))
+                state = fleet_store.upsert_telemetry(payload)
+                await websocket.send_json({"status": "accepted", "vehicle": model_to_dict(state), "summary": fleet_store.summary()})
+            except Exception as exc:
+                await websocket.send_json({"status": "error", "message": str(exc)})
     except WebSocketDisconnect:
         return
 
@@ -61,3 +68,45 @@ def get_eta(stop_id: int, time_of_day: float = 8.0, traffic_factor: float = 1.0,
 @router.get("/demand")
 def get_demand():
     return load_demand_forecast()
+
+
+@router.get("/fleet")
+def get_fleet():
+    return {"summary": fleet_store.summary(), "vehicles": [model_to_dict(vehicle) for vehicle in fleet_store.fleet()]}
+
+
+@router.get("/alerts")
+def get_alerts(include_acknowledged: bool = False):
+    return {"alerts": [model_to_dict(alert) for alert in fleet_store.alerts(include_acknowledged=include_acknowledged)]}
+
+
+@router.post("/alerts/{alert_id}/ack")
+def acknowledge_alert(alert_id: str):
+    alert = fleet_store.acknowledge_alert(alert_id)
+    if alert is None:
+        raise HTTPException(status_code=404, detail="alert not found")
+    return alert
+
+
+@router.get("/routes")
+def get_routes():
+    return {"routes": list_routes()}
+
+
+@router.get("/config")
+def get_project_config():
+    config = get_config().copy()
+    return {
+        "project": config.get("project", {}),
+        "server": config.get("server", {}),
+        "occupancy": config.get("occupancy", {}),
+        "route_monitoring": config.get("route_monitoring", {}),
+        "routes": config.get("routes", {}),
+        "mock_telemetry": config.get("mock_telemetry", {}),
+        "edge_counter": config.get("edge_counter", {}),
+    }
+
+
+@router.post("/chatbot")
+def chatbot(query: ChatQuery):
+    return fleet_store.recommendation(route=query.route, query=query.query)

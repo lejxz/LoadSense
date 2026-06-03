@@ -1,0 +1,88 @@
+{
+  "project": {
+    "name": "LoadSense",
+    "api_title": "LoadSense Backend",
+    "default_route": "04L"
+  },
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8000,
+    "api_prefix": "/api"
+  },
+  "occupancy": {
+    "default_capacity": 16,
+    "overload_demo_buffer": 4,
+    "thresholds": {
+      "green_max": 0.5,
+      "yellow_max": 0.75,
+      "red_max": 1.0
+    }
+  },
+  "routes": {
+    "04L": {
+      "name": "Lahug - Colon",
+      "polyline": [
+        [14.5992, 120.9840],
+        [14.6001, 120.9850],
+        [14.6009, 120.9862],
+        [14.6017, 120.9870]
+      ]
+    },
+    "08A": {
+      "name": "Mambaling - Colon",
+      "polyline": [
+        [14.5988, 120.9835],
+        [14.5996, 120.9846],
+        [14.6004, 120.9854],
+        [14.6011, 120.9864]
+      ]
+    },
+    "12B": {
+      "name": "Banawa - Carbon",
+      "polyline": [
+        [14.5990, 120.9844],
+        [14.5999, 120.9855],
+        [14.6007, 120.9866],
+        [14.6014, 120.9875]
+      ]
+    },
+    "17C": {
+      "name": "Talamban - Downtown",
+      "polyline": [
+        [14.5986, 120.9838],
+        [14.5994, 120.9849],
+        [14.6002, 120.9858],
+        [14.6010, 120.9868]
+      ]
+    }
+  },
+  "route_monitoring": {
+    "deviation_threshold_meters": 200.0
+  },
+  "artifacts": {
+    "eta_model": "cloud/artifacts/eta_model.pkl",
+    "demand_forecast": "cloud/artifacts/demand_forecast.json"
+  },
+  "data": {
+    "synthetic_history": "data/synthetic_occupancy_logs.csv",
+    "edge_counter_output": "data/edge_line_crossing_counts.csv",
+    "synthetic_rows": 500
+  },
+  "mock_telemetry": {
+    "vehicle_id": "J-001",
+    "start_occupancy": 0,
+    "max_occupancy": 16,
+    "interval_seconds": 1.0,
+    "stdout_limit": 0
+  },
+  "edge_counter": {
+    "frames": 240,
+    "line_y": 240
+  },
+  "eta_fallback": {
+    "base_minutes": 5.0,
+    "stop_weight": 0.75,
+    "traffic_weight": 1.5,
+    "time_of_day_weight": 0.05
+  }
+}

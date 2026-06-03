@@ -1,21 +1,501 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>LoadSense Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LoadSense</title>
     <style>
-      body { font-family: Arial, sans-serif; padding: 24px }
-      .led { width: 300px; height: 24px; border-radius: 6px; background: #ddd }
-      .segment { height: 100%; float: left }
+      :root {
+        --ink: #182026;
+        --muted: #66727c;
+        --line: #d9e0e6;
+        --panel: #ffffff;
+        --wash: #f5f7f9;
+        --teal: #02796f;
+        --amber: #b7791f;
+        --red: #c7362f;
+        --blue: #315f9f;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--wash);
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--line);
+        background: #ffffff;
+        position: sticky;
+        top: 0;
+        z-index: 2;
+      }
+
+      h1, h2, h3, p { margin: 0; }
+      h1 { font-size: 22px; }
+      h2 { font-size: 18px; margin-bottom: 12px; }
+      h3 { font-size: 15px; }
+      p { color: var(--muted); line-height: 1.45; }
+
+      button, select, input {
+        font: inherit;
+      }
+
+      button {
+        border: 1px solid var(--line);
+        background: #ffffff;
+        color: var(--ink);
+        border-radius: 6px;
+        padding: 9px 12px;
+        cursor: pointer;
+      }
+
+      button.primary {
+        background: var(--teal);
+        color: #ffffff;
+        border-color: var(--teal);
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 16px;
+        padding: 16px;
+        max-width: 1320px;
+        margin: 0 auto;
+      }
+
+      section, .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+      }
+
+      section { padding: 16px; }
+
+      .toolbar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 4px;
+        padding: 4px;
+        background: #eef3f6;
+        border-radius: 8px;
+      }
+
+      .tabs button {
+        border: 0;
+        background: transparent;
+        padding: 8px 10px;
+      }
+
+      .tabs button.active {
+        background: #ffffff;
+        color: var(--teal);
+        box-shadow: 0 1px 2px rgba(20, 30, 40, 0.12);
+      }
+
+      .view { display: none; }
+      .view.active { display: contents; }
+
+      .map {
+        position: relative;
+        min-height: 420px;
+        overflow: hidden;
+        background:
+          linear-gradient(90deg, rgba(24, 32, 38, 0.06) 1px, transparent 1px),
+          linear-gradient(rgba(24, 32, 38, 0.06) 1px, transparent 1px),
+          #eaf1f4;
+        background-size: 44px 44px;
+      }
+
+      .route-line {
+        position: absolute;
+        left: 12%;
+        top: 22%;
+        width: 76%;
+        height: 56%;
+        border-left: 5px solid var(--blue);
+        border-bottom: 5px solid var(--blue);
+        transform: skew(-18deg);
+      }
+
+      .vehicle-pin {
+        position: absolute;
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        border: 3px solid #ffffff;
+        display: grid;
+        place-items: center;
+        color: #ffffff;
+        font-weight: bold;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      }
+
+      .stop {
+        position: absolute;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ffffff;
+        border: 3px solid var(--blue);
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .card {
+        padding: 14px;
+        min-width: 0;
+      }
+
+      .metric {
+        font-size: 28px;
+        font-weight: 700;
+        margin-top: 6px;
+      }
+
+      .fleet {
+        display: grid;
+        gap: 10px;
+      }
+
+      .vehicle-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        border-radius: 999px;
+        padding: 4px 9px;
+        color: #ffffff;
+        font-size: 13px;
+        text-transform: capitalize;
+        white-space: nowrap;
+      }
+
+      .green { background: #16845b; }
+      .yellow { background: #b7791f; }
+      .red { background: #c7362f; }
+      .blinking_red {
+        background: #c7362f;
+        animation: blink 0.8s step-end infinite;
+      }
+
+      @keyframes blink {
+        50% { opacity: 0.35; }
+      }
+
+      .led-strip {
+        height: 30px;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        background: #d8dee3;
+        overflow: hidden;
+        margin: 10px 0;
+      }
+
+      .led-fill {
+        height: 100%;
+        width: 100%;
+        transition: background 0.2s ease;
+      }
+
+      .alerts {
+        display: grid;
+        gap: 10px;
+        max-height: 330px;
+        overflow: auto;
+      }
+
+      .alert {
+        border-left: 4px solid var(--amber);
+      }
+
+      .alert.high { border-left-color: var(--red); }
+
+      .forecast {
+        display: flex;
+        align-items: end;
+        gap: 5px;
+        height: 180px;
+        border-bottom: 1px solid var(--line);
+        padding-top: 12px;
+      }
+
+      .bar {
+        flex: 1;
+        min-width: 5px;
+        background: var(--blue);
+        border-radius: 4px 4px 0 0;
+      }
+
+      .chat {
+        display: grid;
+        gap: 10px;
+      }
+
+      .chat input, .chat select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px;
+        background: #ffffff;
+      }
+
+      .answer {
+        min-height: 76px;
+        background: #eef8f6;
+        border: 1px solid #c9e3df;
+        border-radius: 8px;
+        padding: 12px;
+      }
+
+      .muted { color: var(--muted); }
+      .stack { display: grid; gap: 16px; }
+      .span-2 { grid-column: span 2; }
+
+      @media (max-width: 900px) {
+        main, .grid {
+          grid-template-columns: 1fr;
+        }
+        .span-2 { grid-column: auto; }
+        header { align-items: flex-start; flex-direction: column; }
+        .map { min-height: 340px; }
+      }
     </style>
   </head>
   <body>
-    <h1>LoadSense — Demo Frontend Placeholder</h1>
-    <p>Open the API at <a href="/api/">/api/</a> and wire telemetry to see live state.</p>
-    <div class="led">
-      <div class="segment" style="width:33%;background:green"></div>
-      <div class="segment" style="width:33%;background:yellow"></div>
-      <div class="segment" style="width:34%;background:red"></div>
-    </div>
+    <header>
+      <div>
+        <h1>LoadSense</h1>
+        <p>Live PUV occupancy, ETA, route safety, and demand intelligence</p>
+      </div>
+      <div class="toolbar">
+        <div class="tabs" role="tablist">
+          <button class="active" data-view="commuter">Commuter</button>
+          <button data-view="operator">Operator</button>
+        </div>
+        <button id="seed" class="primary">Seed Demo Data</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="commuter" class="view active">
+        <section class="span-2">
+          <h2>Route View</h2>
+          <div class="map" id="map">
+            <div class="route-line"></div>
+            <span class="stop" style="left:14%;top:72%"></span>
+            <span class="stop" style="left:36%;top:58%"></span>
+            <span class="stop" style="left:58%;top:43%"></span>
+            <span class="stop" style="left:80%;top:28%"></span>
+          </div>
+        </section>
+
+        <section>
+          <h2>Nearest Vehicle</h2>
+          <div id="nearest" class="fleet"></div>
+        </section>
+
+        <section>
+          <h2>Windshield LED</h2>
+          <div class="led-strip"><div id="led" class="led-fill"></div></div>
+          <p id="ledText">Waiting for live telemetry.</p>
+        </section>
+
+        <section class="span-2">
+          <h2>Boarding Assistant</h2>
+          <div class="chat">
+            <select id="chatRoute">
+              <option value="04L">Route 04L</option>
+              <option value="08A">Route 08A</option>
+              <option value="12B">Route 12B</option>
+              <option value="17C">Route 17C</option>
+            </select>
+            <input id="chatQuery" value="Which jeepney is least crowded right now?" />
+            <button id="ask" class="primary">Ask</button>
+            <div id="answer" class="answer muted">Ask for a route recommendation once telemetry is loaded.</div>
+          </div>
+        </section>
+      </div>
+
+      <div id="operator" class="view">
+        <section class="span-2">
+          <h2>Fleet Summary</h2>
+          <div class="grid">
+            <div class="card"><p>Reporting vehicles</p><div id="vehicleCount" class="metric">0</div></div>
+            <div class="card"><p>Active alerts</p><div id="alertCount" class="metric">0</div></div>
+            <div class="card"><p>Average load</p><div id="avgLoad" class="metric">0</div></div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Fleet</h2>
+          <div id="fleet" class="fleet"></div>
+        </section>
+
+        <section>
+          <h2>Demand Forecast</h2>
+          <div id="forecast" class="forecast"></div>
+          <p id="forecastMeta" class="muted"></p>
+        </section>
+
+        <section class="span-2">
+          <h2>Operator Alerts</h2>
+          <div id="alerts" class="alerts"></div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const api = location.origin + "/api";
+      const tierLabel = tier => tier ? tier.replace("_", " ") : "unknown";
+      const tierClass = tier => ["green", "yellow", "red", "blinking_red"].includes(tier) ? tier : "green";
+
+      document.querySelectorAll(".tabs button").forEach(button => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll(".tabs button").forEach(item => item.classList.remove("active"));
+          document.querySelectorAll(".view").forEach(item => item.classList.remove("active"));
+          button.classList.add("active");
+          document.getElementById(button.dataset.view).classList.add("active");
+        });
+      });
+
+      async function getJson(path, options) {
+        const response = await fetch(api + path, options);
+        if (!response.ok) throw new Error(await response.text());
+        return response.json();
+      }
+
+      function vehicleCard(vehicle) {
+        return `
+          <div class="card vehicle-row">
+            <div>
+              <h3>${vehicle.vehicle_id} · Route ${vehicle.route}</h3>
+              <p>${vehicle.occupancy}/${vehicle.capacity} passengers · ETA ${vehicle.eta_minutes} min · Stop ${vehicle.next_stop_id + 1}</p>
+              <p>${vehicle.route_deviation.anomaly ? "Off-route verification needed" : "On expected route"} · ${vehicle.signal_quality}</p>
+            </div>
+            <span class="badge ${tierClass(vehicle.tier)}">${tierLabel(vehicle.tier)}</span>
+          </div>
+        `;
+      }
+
+      function drawPins(vehicles) {
+        document.querySelectorAll(".vehicle-pin").forEach(pin => pin.remove());
+        const map = document.getElementById("map");
+        vehicles.forEach((vehicle, index) => {
+          const pin = document.createElement("span");
+          pin.className = "vehicle-pin " + tierClass(vehicle.tier);
+          pin.textContent = vehicle.vehicle_id.split("-").pop();
+          pin.style.left = `${18 + ((index * 19) % 68)}%`;
+          pin.style.top = `${66 - ((index * 13) % 42)}%`;
+          map.appendChild(pin);
+        });
+      }
+
+      function updateLed(vehicle) {
+        const led = document.getElementById("led");
+        const text = document.getElementById("ledText");
+        led.className = "led-fill " + tierClass(vehicle?.tier);
+        if (!vehicle) {
+          led.style.background = "#d8dee3";
+          text.textContent = "Waiting for live telemetry.";
+          return;
+        }
+        text.textContent = `${vehicle.vehicle_id} is ${tierLabel(vehicle.tier)} at ${vehicle.occupancy}/${vehicle.capacity} passengers.`;
+      }
+
+      async function refreshFleet() {
+        const data = await getJson("/fleet");
+        const vehicles = data.vehicles;
+        document.getElementById("vehicleCount").textContent = data.summary.vehicle_count;
+        document.getElementById("alertCount").textContent = data.summary.active_alerts;
+        document.getElementById("avgLoad").textContent = data.summary.average_occupancy;
+        document.getElementById("fleet").innerHTML = vehicles.length ? vehicles.map(vehicleCard).join("") : "<p>No telemetry received yet.</p>";
+        document.getElementById("nearest").innerHTML = vehicles.length ? vehicleCard([...vehicles].sort((a, b) => a.eta_minutes - b.eta_minutes)[0]) : "<p>No telemetry received yet.</p>";
+        drawPins(vehicles);
+        updateLed(vehicles[0]);
+      }
+
+      async function refreshAlerts() {
+        const data = await getJson("/alerts");
+        document.getElementById("alerts").innerHTML = data.alerts.length
+          ? data.alerts.map(alert => `<div class="card alert ${alert.severity}"><h3>${alert.severity.toUpperCase()} · ${alert.vehicle_id}</h3><p>${alert.message}</p></div>`).join("")
+          : "<p>No active operator alerts.</p>";
+      }
+
+      async function refreshDemand() {
+        const data = await getJson("/demand");
+        const rows = (data.forecast || []).slice(0, 24);
+        const max = Math.max(1, ...rows.map(row => row.expected_load || 0));
+        document.getElementById("forecast").innerHTML = rows.map(row => `<span class="bar" title="${row.route}: ${row.expected_load}" style="height:${Math.max(6, (row.expected_load / max) * 100)}%"></span>`).join("");
+        document.getElementById("forecastMeta").textContent = rows.length ? `${data.model || "forecast"} · generated ${data.generated_at || "from artifact"}` : "No forecast artifact found yet.";
+      }
+
+      async function seedDemoData() {
+        const now = new Date().toISOString();
+        const payloads = [
+          ["J-214", "04L", 14.5992, 120.9840, 7],
+          ["J-102", "04L", 14.6001, 120.9850, 14],
+          ["J-330", "08A", 14.5996, 120.9846, 17],
+          ["J-417", "12B", 14.6100, 120.9950, 10]
+        ];
+        for (const [vehicle_id, route, latitude, longitude, occupancy] of payloads) {
+          await getJson("/telemetry", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ vehicle_id, route, latitude, longitude, occupancy, timestamp: now })
+          });
+        }
+        await refreshAll();
+      }
+
+      async function askChatbot() {
+        const answer = document.getElementById("answer");
+        answer.textContent = "Checking live fleet context...";
+        answer.classList.add("muted");
+        const result = await getJson("/chatbot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ route: document.getElementById("chatRoute").value, query: document.getElementById("chatQuery").value })
+        });
+        answer.textContent = result.answer;
+        answer.classList.remove("muted");
+      }
+
+      async function refreshAll() {
+        await Promise.all([refreshFleet(), refreshAlerts(), refreshDemand()]);
+      }
+
+      document.getElementById("seed").addEventListener("click", seedDemoData);
+      document.getElementById("ask").addEventListener("click", askChatbot);
+      refreshAll().catch(error => {
+        document.getElementById("nearest").innerHTML = `<p>Backend unavailable: ${error.message}</p>`;
+      });
+      setInterval(() => refreshAll().catch(() => {}), 4000);
+    </script>
   </body>
 </html>

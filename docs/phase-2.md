@@ -1,6 +1,6 @@
 # Phase 2: Cloud Backend
 
-Status: started
+Status: complete
 
 ## What Phase 2 Adds
 
@@ -8,6 +8,8 @@ Status: started
 - A Prophet-based demand forecast JSON artifact for the dashboard
 - A route deviation anomaly check in the telemetry endpoint
 - API endpoints that read the generated artifacts when available
+- A stateful fleet store that keeps the latest telemetry per vehicle
+- Operator-first alerts for overload, route deviation, and signal quality issues
 
 ## Run Steps
 
@@ -26,7 +28,7 @@ venv\Scripts\python.exe cloud\train_demand_forecast.py
 Send mock telemetry with route-aware GPS points:
 
 ```powershell
-venv\Scripts\python.exe edge\mock_telemetry.py --mode ws --route 04L --url ws://localhost:8000/ws/telemetry
+venv\Scripts\python.exe edge\mock_telemetry.py --mode ws --route 04L --url ws://localhost:8000/api/ws/telemetry
 ```
 
 Start the backend:
@@ -51,4 +53,22 @@ Test telemetry anomaly detection:
 
 ```powershell
 Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/telemetry" -ContentType "application/json" -Body '{"vehicle_id":"J-001","route":"04L","latitude":14.6100,"longitude":120.9950,"occupancy":9,"timestamp":"2026-06-02T00:00:00Z"}'
+```
+
+Check live fleet state:
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/api/fleet"
+```
+
+Check alerts:
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/api/alerts"
+```
+
+Ask for a boarding recommendation:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://localhost:8000/api/chatbot" -ContentType "application/json" -Body '{"route":"04L","query":"Which jeepney is least crowded right now?"}'
 ```

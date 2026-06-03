@@ -1,6 +1,8 @@
 import argparse
 import os
 import pickle
+import sys
+from pathlib import Path
 
 import pandas as pd
 from sklearn.compose import ColumnTransformer
@@ -11,6 +13,12 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import mean_absolute_error
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from backend.app.core.config import config_value
+
 
 def build_target(frame: pd.DataFrame) -> pd.Series:
     noise = (frame["stop_index"] % 3) * 0.2
@@ -19,8 +27,8 @@ def build_target(frame: pd.DataFrame) -> pd.Series:
 
 def main():
     parser = argparse.ArgumentParser(description="Train a lightweight ETA model from synthetic occupancy logs")
-    parser.add_argument("--input", default=os.path.join("data", "synthetic_occupancy_logs.csv"))
-    parser.add_argument("--output", default=os.path.join("cloud", "artifacts", "eta_model.pkl"))
+    parser.add_argument("--input", default=config_value("data", "synthetic_history", default=os.path.join("data", "synthetic_occupancy_logs.csv")))
+    parser.add_argument("--output", default=config_value("artifacts", "eta_model", default=os.path.join("cloud", "artifacts", "eta_model.pkl")))
     args = parser.parse_args()
 
     frame = pd.read_csv(args.input)

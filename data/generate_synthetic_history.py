@@ -2,10 +2,17 @@ import argparse
 import csv
 import os
 import random
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-ROUTES = ["04L", "08A", "12B", "17C"]
+from backend.app.core.config import config_value, route_polylines
+
+ROUTES = list(route_polylines().keys())
 
 
 def generate_rows(rows: int):
@@ -30,8 +37,8 @@ def generate_rows(rows: int):
 
 def main():
     parser = argparse.ArgumentParser(description="Generate synthetic occupancy history CSV")
-    parser.add_argument("--rows", type=int, default=500)
-    parser.add_argument("--output", default=os.path.join("data", "synthetic_occupancy_logs.csv"))
+    parser.add_argument("--rows", type=int, default=int(config_value("data", "synthetic_rows", default=500)))
+    parser.add_argument("--output", default=config_value("data", "synthetic_history", default=os.path.join("data", "synthetic_occupancy_logs.csv")))
     args = parser.parse_args()
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)

@@ -1,10 +1,18 @@
 import argparse
 import json
 import os
+import sys
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pandas as pd
 from prophet import Prophet
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from backend.app.core.config import config_value
 
 
 def build_forecast(frame: pd.DataFrame):
@@ -49,8 +57,8 @@ def build_forecast(frame: pd.DataFrame):
 
 def main():
     parser = argparse.ArgumentParser(description="Generate a lightweight demand forecast JSON from synthetic logs")
-    parser.add_argument("--input", default=os.path.join("data", "synthetic_occupancy_logs.csv"))
-    parser.add_argument("--output", default=os.path.join("cloud", "artifacts", "demand_forecast.json"))
+    parser.add_argument("--input", default=config_value("data", "synthetic_history", default=os.path.join("data", "synthetic_occupancy_logs.csv")))
+    parser.add_argument("--output", default=config_value("artifacts", "demand_forecast", default=os.path.join("cloud", "artifacts", "demand_forecast.json")))
     args = parser.parse_args()
 
     frame = pd.read_csv(args.input)

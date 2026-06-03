@@ -1,15 +1,13 @@
 import json
 import pickle
-from pathlib import Path
 from typing import Any, Dict, List
 
 import pandas as pd
 
+from backend.app.core.config import config_value, repo_path
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-ARTIFACT_DIR = REPO_ROOT / "cloud" / "artifacts"
-ETA_MODEL_PATH = ARTIFACT_DIR / "eta_model.pkl"
-DEMAND_FORECAST_PATH = ARTIFACT_DIR / "demand_forecast.json"
+ETA_MODEL_PATH = repo_path(config_value("artifacts", "eta_model", default="cloud/artifacts/eta_model.pkl"))
+DEMAND_FORECAST_PATH = repo_path(config_value("artifacts", "demand_forecast", default="cloud/artifacts/demand_forecast.json"))
 
 
 def load_eta_model() -> Any:
@@ -26,7 +24,13 @@ def predict_eta(stop_id: int, time_of_day: float = 8.0, traffic_factor: float = 
 def predict_eta_details(stop_id: int, time_of_day: float = 8.0, traffic_factor: float = 1.0, route: str = "04L") -> Dict[str, Any]:
     model = load_eta_model()
     if model is None:
-        eta_minutes = round(5.0 + stop_id * 0.75 + traffic_factor * 1.5 + time_of_day * 0.05, 2)
+        eta_minutes = round(
+            float(config_value("eta_fallback", "base_minutes", default=5.0))
+            + stop_id * float(config_value("eta_fallback", "stop_weight", default=0.75))
+            + traffic_factor * float(config_value("eta_fallback", "traffic_weight", default=1.5))
+            + time_of_day * float(config_value("eta_fallback", "time_of_day_weight", default=0.05)),
+            2,
+        )
         return {"eta_minutes": eta_minutes, "source": "fallback"}
 
     frame = pd.DataFrame(
