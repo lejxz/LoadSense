@@ -6,6 +6,8 @@
     <title>LoadSense Operator</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
   </head>
   <body class="operator-page">
     <header class="operator-header">
@@ -47,7 +49,9 @@
           </div>
           <button id="refreshOperator" class="text-button">Refresh</button>
         </div>
-        <div id="operatorMap" class="live-map wide-map"></div>
+        <div id="operatorMap" class="live-map wide-map">
+          <button id="opRecenterBtn" class="map-recenter" title="Center map on fleet or my location">📍</button>
+        </div>
       </section>
 
       <section class="ops-panel">

@@ -10,6 +10,9 @@
     selectedRoute: "04L",
     maps: {},
     mapLayers: {},
+    mapClusters: {},
+    geoWatchId: null,
+    lastPosition: null,
   };
 
   const tierCopy = {
@@ -139,11 +142,20 @@
         }).addTo(map);
         state.maps[containerId] = map;
         state.mapLayers[containerId] = L.layerGroup().addTo(map);
+        // clustering layer
+        try {
+          state.mapClusters[containerId] = L.markerClusterGroup();
+          state.mapClusters[containerId].addTo(map);
+        } catch (e) {
+          state.mapClusters[containerId] = null;
+        }
       }
       const map = state.maps[containerId];
       const layerGroup = state.mapLayers[containerId];
+      const clusterGroup = state.mapClusters[containerId];
       // clear previous layers
       layerGroup.clearLayers();
+      if (clusterGroup && clusterGroup.clearLayers) clusterGroup.clearLayers();
 
       const routes = routeFilter ? state.routes.filter(route => route.route === routeFilter) : state.routes;
       const pointsAll = [];
@@ -160,10 +172,17 @@
       for (const vehicle of vehicles) {
         const lat = Number(vehicle.latitude);
         const lon = Number(vehicle.longitude);
-        const color = tierClass(vehicle.tier) === 'green' ? '#16865d' : tierClass(vehicle.tier) === 'yellow' ? 'var(--amber)' : '#c93b31';
-        const marker = L.circleMarker([lat, lon], { radius: 6, color: '#fff', weight: 1, fillColor: color, fillOpacity: 1 });
+        const tier = tierClass(vehicle.tier);
+        const icon = L.divIcon({ className: 'vehicle-icon-wrapper', html: `<span class="vehicle-div-icon ${tier}"></span>`, iconSize: [18,18], iconAnchor: [9,9] });
+        const marker = L.marker([lat, lon], { icon });
+        const popup = `<strong>${escapeHtml(vehicle.vehicle_id)}</strong><br/>Route: ${escapeHtml(vehicle.route)}<br/>Load: ${escapeHtml(String(vehicle.occupancy))}/${escapeHtml(String(vehicle.capacity))}<br/>ETA: ${escapeHtml(String(vehicle.eta_minutes))} min`;
+        marker.bindPopup(popup);
         marker.bindTooltip(`${escapeHtml(vehicle.vehicle_id)} (${escapeHtml(vehicle.route)})` , { permanent: false });
-        marker.addTo(layerGroup);
+        if (clusterGroup) {
+          clusterGroup.addLayer(marker);
+        } else {
+          marker.addTo(layerGroup);
+        }
         pointsAll.push([lat, lon]);
       }
       // adjust view to bounds if we have points
@@ -355,6 +374,22 @@
       await refreshData();
       renderMobile();
     });
+    // setup recenter buttons and geolocation watch
+    setupRecenterButtons();
+    try {
+      if (navigator.geolocation) {
+        state.geoWatchId = navigator.geolocation.watchPosition(pos => {
+          state.lastPosition = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+          const nearest = findNearestRoute(pos.coords.latitude, pos.coords.longitude);
+          if (nearest && nearest !== state.selectedRoute) {
+            state.selectedRoute = nearest;
+            refreshData().then(() => renderMobile());
+          }
+        }, err => {
+          // ignore errors for watch
+        }, { enableHighAccuracy: false, maximumAge: 5000, timeout: 5000 });
+      }
+    } catch (e) {}
     qs("chatForm").addEventListener("submit", async event => {
       event.preventDefault();
       const input = qs("chatInput");
@@ -428,25 +463,52 @@
 
   function findNearestRoute(lat, lon) {
     if (!state.routes || !state.routes.length) return null;
-    function sqr(x){return x*x}
-    function approxDist(aLat,aLon,bLat,bLon){
-      // simple equirectangular approximation
+    function toRad(x){return x*Math.PI/180}
+    function haversine(aLat,aLon,bLat,bLon){
       const R = 6371000;
-      const x = (bLon - aLon) * Math.cos((aLat + bLat)/2 * Math.PI/180);
-      const y = (bLat - aLat);
-      return Math.sqrt(x*x + y*y) * (Math.PI/180) * R;
+      const dLat = toRad(bLat - aLat);
+      const dLon = toRad(bLon - aLon);
+      const A = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(toRad(aLat))*Math.cos(toRad(bLat))*Math.sin(dLon/2)*Math.sin(dLon/2);
+      const C = 2 * Math.atan2(Math.sqrt(A), Math.sqrt(1-A));
+      return R * C;
     }
     let best = null;
     let bestD = Infinity;
     for (const r of state.routes) {
       const points = (r.polyline || []).map(p => [Number(p.latitude), Number(p.longitude)]);
       for (const [plat, plon] of points) {
-        const d = approxDist(lat, lon, plat, plon);
+        const d = haversine(lat, lon, plat, plon);
         if (d < bestD) { bestD = d; best = r.route; }
       }
     }
     // threshold 1000m to auto-select
-    return bestD < 1000 ? best : null;
+    return bestD < 600 ? best : null;
+  }
+
+  function setupRecenterButtons() {
+    const recenter = qs('recenterBtn');
+    const opRecenter = qs('opRecenterBtn');
+    if (recenter) recenter.addEventListener('click', () => {
+      const map = state.maps['mobileMap'];
+      if (!map) return;
+      if (state.lastPosition) {
+        map.setView([state.lastPosition.latitude, state.lastPosition.longitude], 15);
+      } else {
+        // fallback to fit to selected route
+        drawMap('mobileMap', state.selectedRoute);
+      }
+    });
+    if (opRecenter) opRecenter.addEventListener('click', () => {
+      const map = state.maps['operatorMap'];
+      if (!map) return;
+      // center on fleet bounds
+      const pts = state.vehicles.filter(v => Number(v.latitude) && Number(v.longitude)).map(v => [Number(v.latitude), Number(v.longitude)]);
+      if (pts.length) {
+        try { map.fitBounds(L.latLngBounds(pts), { maxZoom: 14 }); } catch (e) {}
+      } else if (state.lastPosition) {
+        map.setView([state.lastPosition.latitude, state.lastPosition.longitude], 13);
+      }
+    });
   }
 
   function renderRoutesAdmin() {

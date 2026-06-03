@@ -6,6 +6,8 @@
     <title>LoadSense Commuter</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
   </head>
   <body class="mobile-page">
     <main class="phone-frame" aria-label="LoadSense commuter mobile app">
@@ -77,7 +79,9 @@
             </div>
             <select id="mapRoute"></select>
           </div>
-          <div id="mobileMap" class="live-map"></div>
+          <div id="mobileMap" class="live-map">
+            <button id="recenterBtn" class="map-recenter" title="Center map on my location">📍</button>
+          </div>
           <div class="map-legend">
             <span><i class="dot green-dot"></i>Seats</span>
             <span><i class="dot yellow-dot"></i>Standing</span>
