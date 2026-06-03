@@ -9,7 +9,10 @@ ROUTE_NAMES = route_names()
 
 
 def get_route_stops(route: str) -> List[dict]:
-    points = ROUTE_POLYLINES.get(route) or sqlite_store.load_route_polyline(route) or ROUTE_POLYLINES[default_route()]
+    points = sqlite_store.load_route_polyline(route) or ROUTE_POLYLINES.get(route) or ROUTE_POLYLINES.get(default_route()) or [(10.3157, 123.8854), (10.3308, 123.8990)]
+    if len(points) > 8:
+        indexes = sorted({0, len(points) - 1, *[round((len(points) - 1) * ratio) for ratio in (0.2, 0.35, 0.5, 0.65, 0.8)]})
+        points = [points[index] for index in indexes]
     return [
         {
             "stop_id": index,
@@ -22,6 +25,9 @@ def get_route_stops(route: str) -> List[dict]:
 
 
 def list_routes() -> List[dict]:
+    db_routes = sqlite_store.load_routes()
+    if db_routes:
+        return db_routes
     return [
         {
             "route": route,

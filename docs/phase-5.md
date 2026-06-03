@@ -13,9 +13,9 @@ $env:PYTHONPATH='.'; venv\Scripts\python.exe -m uvicorn backend.app.main:app --r
 2. Open the frontend at `http://localhost:8000`.
 3. Open `http://localhost:8000/mobile.html` and sign in to the commuter app.
 4. Open `http://localhost:8000/operator.html` for the operator console.
-5. Seed demo data from either interface.
+5. Wait a few seconds for the backend's synthetic Cebu PUV fleet to populate automatically.
 6. Ask the boarding assistant: `Which jeepney is least crowded right now?`
-7. Run live telemetry in another terminal.
+7. Optionally run an extra telemetry stream in another terminal.
 
 ```powershell
 venv\Scripts\python.exe edge\mock_telemetry.py --mode http --url http://localhost:8000/api/telemetry --interval 1

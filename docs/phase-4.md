@@ -25,7 +25,7 @@ http://localhost:8000/mobile.html
 http://localhost:8000/operator.html
 ```
 
-Use the commuter `+` button or operator `Seed Demo Data` button to populate the demo immediately, or run `edge/mock_telemetry.py` for live updates.
+Start the backend to populate the interface demo automatically with looping synthetic PUVs. Run `edge/mock_telemetry.py` only when you want to add a separate live edge telemetry stream.
 
 ## Design Notes
 

@@ -10,6 +10,7 @@ from backend.app.db.models import OperatorAlert, VehicleState
 
 
 DB_PATH = repo_path(config_value("data", "database", default="data/loadsense_demo.sqlite"))
+CEBU_ROUTES_PATH = repo_path("data/cebu_osm_routes.geojson")
 
 
 def _connect() -> sqlite3.Connection:
@@ -96,21 +97,66 @@ def init_db() -> None:
             );
             """
         )
-        # seed routes table from config if empty
-        cur = conn.execute("SELECT COUNT(*) AS count FROM routes").fetchone()
-        if cur and cur["count"] == 0:
-            try:
-                from backend.app.core.config import config_value
+        _seed_cebu_routes_if_needed(conn)
 
-                cfg_routes = config_value("routes", default={})
-                for route, details in cfg_routes.items():
-                    conn.execute(
-                        "INSERT OR REPLACE INTO routes (route, name, polyline_json) VALUES (?, ?, ?)",
-                        (route, details.get("name", route), json.dumps(details.get("polyline", []))),
-                    )
-            except Exception:
-                # if seeding fails, continue without raising
-                pass
+
+def _seed_cebu_routes_if_needed(conn: sqlite3.Connection) -> None:
+    row = conn.execute("SELECT COUNT(*) AS count FROM routes").fetchone()
+    route_count = int(row["count"] if row else 0)
+    cebu_count = conn.execute(
+        "SELECT COUNT(*) AS count FROM routes WHERE polyline_json LIKE '%10.%' AND polyline_json LIKE '%123.%'"
+    ).fetchone()["count"]
+    if route_count and cebu_count:
+        return
+    routes = _load_cebu_geojson_routes()
+    if not routes:
+        return
+    conn.execute("DELETE FROM routes")
+    for route in routes:
+        conn.execute(
+            "INSERT OR REPLACE INTO routes (route, name, polyline_json) VALUES (?, ?, ?)",
+            (route["route"], route["name"], json.dumps(route["polyline"])),
+        )
+
+
+def _load_cebu_geojson_routes(max_points: int = 160) -> list[dict[str, Any]]:
+    if not CEBU_ROUTES_PATH.exists():
+        return []
+    try:
+        payload = json.loads(CEBU_ROUTES_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    routes: list[dict[str, Any]] = []
+    for index, feature in enumerate(payload.get("features", [])):
+        props = feature.get("properties", {})
+        geometry = feature.get("geometry", {})
+        if geometry.get("type") != "LineString":
+            continue
+        route_id = str(props.get("route_id") or props.get("route") or f"CEBU-{index + 1}").strip()
+        name = str(props.get("route_name") or props.get("name") or route_id).strip()
+        points = [
+            (float(lat), float(lon))
+            for lon, lat, *_ in geometry.get("coordinates", [])
+            if 10.0 <= float(lat) <= 10.6 and 123.6 <= float(lon) <= 124.1
+        ]
+        points = _sample_polyline(points, max_points=max_points)
+        if route_id and name and len(points) >= 2:
+            routes.append({"route": route_id, "name": name, "polyline": points})
+    return routes
+
+
+def _sample_polyline(points: list[tuple[float, float]], max_points: int) -> list[tuple[float, float]]:
+    if len(points) <= max_points:
+        return points
+    sampled: list[tuple[float, float]] = []
+    last_index = len(points) - 1
+    for i in range(max_points):
+        sampled.append(points[round((i / (max_points - 1)) * last_index)])
+    result: list[tuple[float, float]] = []
+    for point in sampled:
+        if not result or point != result[-1]:
+            result.append(point)
+    return result
 
 
 def save_vehicle_state(state: VehicleState, received_at: str) -> None:
@@ -335,13 +381,35 @@ def load_routes() -> list[dict[str, Any]]:
             poly = json.loads(row["polyline_json"]) if row["polyline_json"] else []
         except Exception:
             poly = []
+        stops = _display_stops(poly, row["name"])
         result.append({
             "route": row["route"],
             "name": row["name"],
             "polyline": [{"latitude": float(lat), "longitude": float(lon)} for lat, lon in poly],
-            "stops": [{"stop_id": i, "name": f"{row['name']} Stop {i+1}", "latitude": lat, "longitude": lon} for i, (lat, lon) in enumerate(poly)],
+            "stops": stops,
         })
     return result
+
+
+def _display_stops(poly: list[list[float]] | list[tuple[float, float]], name: str) -> list[dict[str, Any]]:
+    if not poly:
+        return []
+    if len(poly) <= 8:
+        indexes = list(range(len(poly)))
+    else:
+        indexes = sorted({0, len(poly) - 1, *[round((len(poly) - 1) * ratio) for ratio in (0.2, 0.35, 0.5, 0.65, 0.8)]})
+    labels = ["Origin", "Checkpoint 1", "Checkpoint 2", "Mid-route", "Checkpoint 3", "Checkpoint 4", "Terminal"]
+    stops = []
+    for display_index, point_index in enumerate(indexes):
+        lat, lon = poly[point_index]
+        label = labels[min(display_index, len(labels) - 1)]
+        stops.append({
+            "stop_id": point_index,
+            "name": f"{name} {label}",
+            "latitude": float(lat),
+            "longitude": float(lon),
+        })
+    return stops
 
 
 def _vehicle_from_row(row: sqlite3.Row) -> VehicleState:

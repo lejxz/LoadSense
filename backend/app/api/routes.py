@@ -107,15 +107,15 @@ def get_database_status():
 
 
 @router.get("/routes")
-def get_routes():
-    # prefer database-backed routes when available
-    try:
-        db_routes = sqlite_store.load_routes()
-        if db_routes:
-            return {"routes": db_routes}
-    except Exception:
-        pass
-    return {"routes": list_routes()}
+def get_routes(route: Optional[str] = None, q: Optional[str] = None):
+    routes = list_routes()
+    query = (route or q or "").strip().lower()
+    if query:
+        routes = [
+            item for item in routes
+            if query in item["route"].lower() or query in item["name"].lower()
+        ]
+    return {"routes": routes}
 
 
 class RoutePayload(BaseModel):

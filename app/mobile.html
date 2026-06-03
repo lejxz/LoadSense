@@ -49,11 +49,8 @@
                 <select id="homeRouteSelect"></select>
               </label>
             </div>
-            <p id="bestVehicleBody">Seed demo data to view live ETA and occupancy recommendations.</p>
+            <p id="bestVehicleBody">Live demo vehicles are simulated by the Python backend and loop through Cebu routes.</p>
             <div id="ledPill" class="occupancy-pill neutral">No LED signal</div>
-            <div style="margin-top:10px;">
-              <button id="seedMobile" class="button primary">Seed demo data</button>
-            </div>
           </div>
           <div class="quick-grid">
             <article>
@@ -99,9 +96,10 @@
           <div class="section-head">
             <div>
               <p class="eyebrow">Route directory</p>
-              <h2>Stops and corridors</h2>
+              <h2>Selected route</h2>
             </div>
           </div>
+          <input id="routeSearch" class="route-search" placeholder="Search route code or corridor" />
           <div id="routeList" class="route-list"></div>
         </section>
 

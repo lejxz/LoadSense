@@ -11,13 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from backend.app.core.config import config_value, default_route, route_polylines
-
-ROUTE_POINTS = {
-    route: points[0]
-    for route, points in route_polylines().items()
-    if points
-}
+from backend.app.core.config import config_value, default_route
+from backend.app.db import sqlite_store
 
 
 try:
@@ -26,31 +21,40 @@ except Exception:
     websockets = None
 
 
-def make_payload(vehicle_id, route, base_lat, base_lon, occupancy):
+def make_payload(vehicle_id, route, latitude, longitude, occupancy):
     return {
         "vehicle_id": vehicle_id,
         "route": route,
-        "latitude": base_lat + random.uniform(-0.0005, 0.0005),
-        "longitude": base_lon + random.uniform(-0.0005, 0.0005),
+        "latitude": latitude + random.uniform(-0.00008, 0.00008),
+        "longitude": longitude + random.uniform(-0.00008, 0.00008),
         "occupancy": occupancy,
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
-def get_base_coordinates(route):
-    return ROUTE_POINTS.get(route, ROUTE_POINTS[default_route()])
+def get_route_points(route):
+    points = sqlite_store.load_route_polyline(route) or sqlite_store.load_route_polyline(default_route())
+    if not points:
+        return [(10.3157, 123.8854), (10.3308, 123.8990)]
+    return points
+
+
+def get_route_coordinate(points, index):
+    point = points[index % len(points)]
+    return point[0], point[1]
 
 
 def run_stdout(args):
     vehicle_id = args.vehicle_id
     route = args.route
-    base_lat, base_lon = get_base_coordinates(route)
+    points = get_route_points(route)
     occupancy = args.start
     sent = 0
     while args.limit == 0 or sent < args.limit:
         occupancy = max(0, occupancy + random.randint(-2, 3))
         occupancy = min(args.max, occupancy)
-        payload = make_payload(vehicle_id, route, base_lat, base_lon, occupancy)
+        latitude, longitude = get_route_coordinate(points, sent)
+        payload = make_payload(vehicle_id, route, latitude, longitude, occupancy)
         print(json.dumps(payload), flush=True)
         sent += 1
         time.sleep(args.interval)
@@ -61,14 +65,15 @@ def run_http(args):
 
     vehicle_id = args.vehicle_id
     route = args.route
-    base_lat, base_lon = get_base_coordinates(route)
+    points = get_route_points(route)
     occupancy = args.start
     url = args.url
     sent = 0
     while args.limit == 0 or sent < args.limit:
         occupancy = max(0, occupancy + random.randint(-2, 3))
         occupancy = min(args.max, occupancy)
-        payload = make_payload(vehicle_id, route, base_lat, base_lon, occupancy)
+        latitude, longitude = get_route_coordinate(points, sent)
+        payload = make_payload(vehicle_id, route, latitude, longitude, occupancy)
         data = json.dumps(payload).encode()
         req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
         try:
@@ -86,7 +91,7 @@ async def run_ws_async(args):
         return
     vehicle_id = args.vehicle_id
     route = args.route
-    base_lat, base_lon = get_base_coordinates(route)
+    points = get_route_points(route)
     occupancy = args.start
     url = args.url
     async with websockets.connect(url) as ws:
@@ -94,7 +99,8 @@ async def run_ws_async(args):
         while args.limit == 0 or sent < args.limit:
             occupancy = max(0, occupancy + random.randint(-2, 3))
             occupancy = min(args.max, occupancy)
-            payload = make_payload(vehicle_id, route, base_lat, base_lon, occupancy)
+            latitude, longitude = get_route_coordinate(points, sent)
+            payload = make_payload(vehicle_id, route, latitude, longitude, occupancy)
             text = json.dumps(payload)
             await ws.send(text)
             try:

@@ -20,11 +20,20 @@
       </div>
       <div class="operator-actions">
         <a class="button secondary" href="mobile.html">Commuter App</a>
-        <button id="seedOperator" class="button primary">Seed Demo Data</button>
+        <button id="refreshOperator" class="button primary">Refresh</button>
       </div>
     </header>
 
     <main class="operator-shell">
+      <nav class="ops-tabs" aria-label="Operator dashboard tabs">
+        <button class="active" data-ops-tab="opsOverview">Overview</button>
+        <button data-ops-tab="opsFleet">Fleet</button>
+        <button data-ops-tab="opsRoutes">Routes</button>
+        <button data-ops-tab="opsDemand">Demand</button>
+        <button data-ops-tab="opsAlerts">Alerts</button>
+        <button data-ops-tab="opsData">Database</button>
+      </nav>
+
       <section class="ops-metrics">
         <article>
           <span>Reporting vehicles</span>
@@ -44,19 +53,21 @@
         </article>
       </section>
 
+      <section id="opsOverview" class="ops-tab-panel active">
       <section class="ops-map-panel">
         <div class="section-head">
           <div>
             <p class="eyebrow">Network view</p>
             <h2>Live PUV map</h2>
           </div>
-          <button id="refreshOperator" class="text-button">Refresh</button>
         </div>
         <div id="operatorMap" class="live-map wide-map">
           <button id="opRecenterBtn" class="map-recenter" title="Center map on fleet or my location" aria-label="Center map on fleet or my location">+</button>
         </div>
       </section>
+      </section>
 
+      <section id="opsRoutes" class="ops-tab-panel">
       <section class="ops-panel">
         <div class="section-head">
           <div>
@@ -106,7 +117,9 @@
           <div id="routesTable" style="margin-top:12px"></div>
         </div>
       </section>
+      </section>
 
+      <section id="opsFleet" class="ops-tab-panel">
       <section class="ops-panel">
         <div class="section-head">
           <div>
@@ -116,7 +129,9 @@
         </div>
         <div id="operatorFleet" class="fleet-table"></div>
       </section>
+      </section>
 
+      <section id="opsDemand" class="ops-tab-panel">
       <section class="ops-panel">
         <div class="section-head">
           <div>
@@ -127,7 +142,9 @@
         <div id="forecastBars" class="forecast-bars"></div>
         <p id="forecastMeta" class="muted"></p>
       </section>
+      </section>
 
+      <section id="opsAlerts" class="ops-tab-panel">
       <section class="ops-panel alerts-panel">
         <div class="section-head">
           <div>
@@ -137,7 +154,9 @@
         </div>
         <div id="operatorAlerts" class="alert-list"></div>
       </section>
+      </section>
 
+      <section id="opsData" class="ops-tab-panel">
       <section class="ops-panel">
         <div class="section-head">
           <div>
@@ -156,6 +175,7 @@
           </div>
         </div>
         <div id="incidentLog" class="incident-list"></div>
+      </section>
       </section>
 
     </main>

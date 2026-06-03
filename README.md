@@ -6,7 +6,7 @@ LoadSense is implemented here as a software-only demo: edge hardware is simulate
 
 ## What Is Implemented
 
-- Mock GPS and occupancy telemetry for jeepney/PUV routes.
+- Automatic synthetic GPS and occupancy telemetry for Cebu jeepney/PUV routes.
 - Occupancy tier logic: Green, Yellow, Red, and Blinking Red.
 - Stateful FastAPI backend with SQLite persistence, live fleet state, route deviation checks, driving anomaly alerts, ETA, demand forecast, operator alerts, and a context-based boarding assistant.
 - Software-only edge line-crossing counter that exports frame counts and LED tiers.
@@ -46,10 +46,18 @@ http://localhost:8000/mobile.html
 http://localhost:8000/operator.html
 ```
 
-Click `Seed Demo Data` in the operator console, use the `+` button in the commuter app, or send live mock telemetry:
+The interface demo starts with looping synthetic PUVs automatically when the backend starts. Each Cebu route gets multiple simulated PUVs that move along the route polyline and persist through SQLite.
+
+Optional: send an extra mock edge telemetry stream:
 
 ```powershell
 venv\Scripts\python.exe edge\mock_telemetry.py --mode http --url http://localhost:8000/api/telemetry --interval 1
+```
+
+Docker Compose:
+
+```powershell
+docker compose up --build
 ```
 
 Generate edge line-crossing demo evidence:
@@ -70,7 +78,7 @@ The line-crossing counter should stay separate for the hackathon demo. It repres
 - `GET /api/eta/{stop_id}` returns ETA from the trained model when available.
 - `GET /api/demand` returns demand forecast rows for the dashboard.
 - `POST /api/chatbot` returns a boarding recommendation using live fleet context.
-- `GET /api/routes` returns route polylines and stop metadata.
+- `GET /api/routes` returns SQLite-backed Cebu route polylines and stop metadata. Use `?route=04L` or `?q=Parkmall` to filter.
 
 ## Verification
 

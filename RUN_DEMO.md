@@ -45,14 +45,15 @@ http://localhost:8000/operator.html
 
 Use `http://localhost:8000/` as the launcher. Use the other two URLs when presenting each role directly.
 
-## 3. Seed Or Stream Telemetry
+## 3. Automatic Synthetic Telemetry
 
 Fastest path:
 
-- In the commuter app, sign in and press the `+` button.
-- In the operator console, press `Seed Demo Data`.
+- Start the backend.
+- Open the commuter or operator page.
+- The backend automatically runs a software-only fleet demo: at least three ghost PUVs loop through each SQLite Cebu route and publish normal telemetry records.
 
-Live telemetry path:
+Optional extra telemetry path:
 
 ```powershell
 & venv\Scripts\python.exe edge\mock_telemetry.py --mode http --url http://localhost:8000/api/telemetry --interval 1
@@ -93,9 +94,27 @@ This writes frame-level evidence with:
 
 This is intentionally separate from the browser app. In the real system it would run on the Raspberry Pi 5 or Jetson Nano. With `--export http` or `--export both`, the script POSTs occupancy telemetry to `POST /api/telemetry`; the backend persists it to SQLite and it appears in `/api/fleet`, `/api/database/status`, the commuter map, and the operator console.
 
-## 5. Import Route Files
+No real edge hardware or GPS is required for this hackathon demo. The PUV map uses hardcoded synthetic movement along public Cebu route geometry, while the counting demo simulates the edge camera path on the laptop.
 
-Operator UI:
+## 5. Docker Compose
+
+```powershell
+docker compose up --build
+```
+
+Open:
+
+```text
+http://localhost:8000/
+http://localhost:8000/mobile.html
+http://localhost:8000/operator.html
+```
+
+## 6. Route Data
+
+The default route database is seeded from `data/cebu_osm_routes.geojson`, generated from OpenStreetMap Overpass route/corridor data for Cebu. Route code references were cross-checked against public Cebu jeepney route listings, including OpenStreetMap's Metro Cebu public transport wiki and Cebu Jeepneys route pages.
+
+Operator UI import path:
 
 1. Open `http://localhost:8000/operator.html`.
 2. In `Route database`, choose a `.geojson`, `.csv`, or GTFS `.zip`.
@@ -117,7 +136,7 @@ Expected geometry formats:
 - CSV with `route` or `route_id`, `name` or `route_name`, and `latitude`/`longitude` columns.
 - GTFS zip with `shapes.txt`; `routes.txt` and `trips.txt` are used when present.
 
-## 6. Database Check
+## 7. Database Check
 
 The backend uses SQLite for the local cloud database:
 
@@ -134,7 +153,7 @@ Invoke-RestMethod http://localhost:8000/api/incidents
 
 The operator console also displays table counts and the incident log.
 
-## 7. Validation
+## 8. Validation
 
 ```powershell
 & venv\Scripts\python.exe tests\run_health_check.py
@@ -148,7 +167,7 @@ status_code: 200
 api smoke ok
 ```
 
-## 8. Pitch Order
+## 9. Pitch Order
 
 1. Show the architecture diagram.
 2. Run the edge counting demo and open `data/edge_line_crossing_counts.csv`.

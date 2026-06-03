@@ -36,7 +36,7 @@ def _distance_point_to_segment(point: RoutePoint, start: RoutePoint, end: RouteP
 
 
 def distance_to_route_meters(latitude: float, longitude: float, route: str) -> float:
-    points = ROUTE_POLYLINES.get(route) or sqlite_store.load_route_polyline(route)
+    points = sqlite_store.load_route_polyline(route) or ROUTE_POLYLINES.get(route)
     if not points:
         raise KeyError(f"unknown route '{route}'")
 

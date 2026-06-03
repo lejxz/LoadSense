@@ -16,7 +16,7 @@ The actual PDF could not be text-extracted in this environment because no local 
 
 | Diagram item | Status | Implementation |
 |---|---|---|
-| GPS unit | Implemented as simulation | `edge/mock_telemetry.py` sends route-aware latitude and longitude. |
+| GPS unit | Implemented as simulation | Backend startup runs looping synthetic PUV positions; `edge/mock_telemetry.py` can send extra route-aware latitude and longitude. |
 | Overhead camera | Simulated | `edge/line_crossing_counter.py` produces frame-level person crossing evidence. |
 | Commuter queries | Implemented | Mobile Chat tab calls `POST /api/chatbot`. |
 | YOLOv8-nano inference | Simulated boundary | The repo does not run real YOLO; it emits the same downstream count/tier contract. |
@@ -27,7 +27,7 @@ The actual PDF could not be text-extracted in this environment because no local 
 | Demand forecasting | Implemented | `cloud/train_demand_forecast.py`, `cloud/artifacts/demand_forecast.json`, operator forecast chart. |
 | Route and safety monitor | Implemented | Route deviation, GPS dropout, overload, overspeeding, and sudden-stop alerts. |
 | NLP chatbot | Implemented as deterministic assistant | `POST /api/chatbot` uses live fleet context; no external LLM key is required for demo reliability. |
-| Cloud database | Implemented | SQLite database at `data/loadsense_demo.sqlite`. |
+| Cloud database | Implemented | SQLite database at `data/loadsense_demo.sqlite`; route geometry is seeded from `data/cebu_osm_routes.geojson`, not config. |
 | Operator dashboard | Implemented | `app/operator.html`. |
 | Commuter app | Implemented | `app/mobile.html`. |
 | Safety alerts | Implemented | Operator-first alert list, acknowledgement, and incident history. |
@@ -42,7 +42,7 @@ The actual PDF could not be text-extracted in this environment because no local 
 | Dynamic occupancy classification | Implemented | Shared thresholds in `backend/app/core/occupancy.py`. |
 | External visual signaling | Simulated | LED tier shown in UI and edge CSV. |
 | Zone-based heatmapping | Implemented as simulated zones | Edge CSV includes `zone` for front entrance, mid cabin, rear cabin. |
-| GPS tracking | Implemented as simulation | Telemetry includes coordinates per vehicle and route. |
+| GPS tracking | Implemented as simulation | Telemetry includes synthetic coordinates per vehicle and route; no real GPS hardware is required for the hackathon demo. |
 | AI-predicted ETA | Implemented | Model artifact is used when available; fallback exists for demo. |
 | Traffic/weather factor | Partially implemented | ETA supports a traffic factor; live OpenWeatherMap integration is not used in the offline demo. |
 | Route deviation detection | Implemented | Off-route telemetry raises alerts. |
@@ -52,7 +52,7 @@ The actual PDF could not be text-extracted in this environment because no local 
 | Lightweight mobile app | Implemented | Phone-shaped low-bandwidth HTML/CSS/JS app. |
 | Stop-level ETA and crowd density | Implemented | Mobile Home and route vehicle cards show ETA, stop index, and occupancy. |
 | Mobile map UI | Implemented | Mobile Map tab draws route schematics and PUV pins. |
-| Route list | Implemented | Mobile Routes tab lists corridors and stops. |
+| Route list | Implemented | Mobile Routes tab shows one searched/selected route with concise Cebu route facts and sampled checkpoints. |
 | AI boarding chatbot | Implemented | Mobile Chat tab calls backend recommendation endpoint. |
 | Operator demand forecasting | Implemented | Operator console renders checked-in demand forecast artifact. |
 | Proactive dispatch view | Implemented for demo | Operator forecast and fleet status support dispatch discussion; no automated dispatch optimizer is included. |

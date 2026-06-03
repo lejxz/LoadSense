@@ -9,3 +9,4 @@ websockets
 python-dotenv
 ultralytics
 python-multipart
+httpx2

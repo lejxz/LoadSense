@@ -15,6 +15,7 @@
     lastPosition: null,
     selectedDestination: null,
     selectedVehicleId: null,
+    routeQuery: "",
   };
 
   const tierCopy = {
@@ -66,32 +67,6 @@
     const points = (route?.polyline || []).filter(isMapCoordinate);
     if (!points.length) return null;
     return points[Math.min(points.length - 1, Math.max(0, Math.floor(points.length * ratio)))];
-  }
-
-  async function seedDemoData() {
-    if (!state.routes.length) await refreshData();
-    const now = new Date().toISOString();
-    const routes = state.routes.filter(route => (route.polyline || []).some(isMapCoordinate)).slice(0, 5);
-    const payloads = routes.map((route, index) => {
-      const point = routePoint(route, 0.22 + index * 0.13) || { latitude: 10.3157, longitude: 123.8854 };
-      return [
-        `CEB-${String(index + 1).padStart(3, "0")}`,
-        route.route,
-        Number(point.latitude),
-        Number(point.longitude),
-        [6, 11, 15, 9, 13][index] || 8,
-        [18, 24, 16, 21, 14][index] || 16,
-        "ok",
-      ];
-    });
-    for (const [vehicle_id, route, latitude, longitude, occupancy, speed_kph, signal_quality] of payloads) {
-      await getJson("/telemetry", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vehicle_id, route, latitude, longitude, occupancy, speed_kph, signal_quality, timestamp: now }),
-      });
-    }
-    await refreshData();
   }
 
   async function refreshData() {
@@ -159,10 +134,9 @@
     if (typeof L !== 'undefined') {
       // initialize map if needed
       if (!state.maps[containerId]) {
-        const map = L.map(containerId, { zoomControl: false }).setView([10.3157, 123.8854], 13);
+        const map = L.map(containerId, { zoomControl: true, attributionControl: false }).setView([10.3157, 123.8854], 13);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
           maxZoom: 19,
-          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
         }).addTo(map);
         state.maps[containerId] = map;
         state.mapLayers[containerId] = L.layerGroup().addTo(map);
@@ -194,7 +168,7 @@
         const latlngs = (route.polyline || []).filter(p => Number(p.latitude) && Number(p.longitude)).map(p => [Number(p.latitude), Number(p.longitude)]);
         if (latlngs.length) {
             const selectedRoute = route.route === state.selectedRoute;
-            const polyline = L.polyline(latlngs, { color: selectedRoute ? '#0f766e' : '#5b8fc8', weight: selectedRoute ? 5 : 3, opacity: selectedRoute ? 0.92 : 0.55 }).addTo(layerGroup);
+            const polyline = L.polyline(latlngs, { color: selectedRoute ? '#1a73e8' : '#9aa0a6', weight: selectedRoute ? 6 : 3, opacity: selectedRoute ? 0.95 : 0.35 }).addTo(layerGroup);
             // start and end markers
             const start = latlngs[0];
             const end = latlngs[latlngs.length-1];
@@ -347,7 +321,7 @@
     const best = routeVehicles[0] || [...state.vehicles].sort(vehicleSort)[0];
     qs("mobileFleet").innerHTML = routeVehicles.length
       ? routeVehicles.map(renderVehicleCard).join("")
-      : `<p class="empty-copy">No live PUVs for Route ${escapeHtml(selected)}. Seed demo data or start mock telemetry.</p>`;
+      : `<p class="empty-copy">No live PUVs for Route ${escapeHtml(selected)} yet. The backend simulator will publish the next loop shortly.</p>`;
     document.querySelectorAll("[data-zoom-vehicle]").forEach(button => {
       button.addEventListener("click", () => zoomVehicle(button.dataset.zoomVehicle));
     });
@@ -363,17 +337,7 @@
       qs("homeSafety").textContent = safeText;
     }
 
-    qs("routeList").innerHTML = state.routes.map(route => `
-      <article class="route-card">
-        <div>
-          <h3>${escapeHtml(route.route)} ${escapeHtml(route.name)}</h3>
-          <p>${route.stops.length} tracked stops - ${state.vehicles.filter(vehicle => vehicle.route === route.route).length} live PUVs</p>
-        </div>
-        <ol>
-          ${route.stops.map(stop => `<li>${escapeHtml(stop.name)}</li>`).join("")}
-        </ol>
-      </article>
-    `).join("");
+    renderRouteDirectory();
     renderDestinationConfirm();
     drawMap("mobileMap", selected);
   }
@@ -462,13 +426,13 @@
         renderMobile();
       });
     }
-    qs("seedMobile").addEventListener("click", async () => {
-      await seedDemoData();
-      renderMobile();
-    });
     qs("refreshMobile").addEventListener("click", async () => {
       await refreshData();
       renderMobile();
+    });
+    qs("routeSearch").addEventListener("input", event => {
+      state.routeQuery = event.target.value.trim();
+      renderRouteDirectory();
     });
     // setup recenter buttons and geolocation watch
     setupRecenterButtons();
@@ -559,6 +523,44 @@
     renderDatabaseStatus();
     renderIncidentLog();
     renderRoutesAdmin();
+  }
+
+  function renderRouteDirectory() {
+    const query = state.routeQuery.toLowerCase();
+    const matched = query
+      ? state.routes.filter(route => `${route.route} ${route.name}`.toLowerCase().includes(query))
+      : state.routes.filter(route => route.route === state.selectedRoute);
+    const routes = matched.slice(0, 1);
+    qs("routeList").innerHTML = routes.length
+      ? routes.map(route => {
+          const vehicles = state.vehicles.filter(vehicle => vehicle.route === route.route).sort(vehicleSort);
+          const sampleStops = (route.stops || []).slice(0, 7);
+          return `
+            <article class="route-card clean-route-card">
+              <div>
+                <h3>${escapeHtml(route.route)} ${escapeHtml(route.name)}</h3>
+                <p>${(route.polyline || []).length} map points from Cebu OSM data - ${vehicles.length} live simulated PUVs</p>
+              </div>
+              <div class="route-facts">
+                <span>Best ETA <strong>${vehicles[0] ? `${vehicles[0].eta_minutes}m` : "--"}</strong></span>
+                <span>Lowest load <strong>${vehicles[0] ? `${vehicles[0].occupancy}/${vehicles[0].capacity}` : "--"}</strong></span>
+              </div>
+              <ol>
+                ${sampleStops.map(stop => `<li>${escapeHtml(stop.name)}</li>`).join("")}
+              </ol>
+            </article>
+          `;
+        }).join("")
+      : `<p class="empty-copy">No route matched that search.</p>`;
+    const first = routes[0];
+    if (first && first.route !== state.selectedRoute) {
+      state.selectedRoute = first.route;
+      const mapRoute = qs("mapRoute");
+      const homeRoute = qs("homeRouteSelect");
+      if (mapRoute) mapRoute.value = first.route;
+      if (homeRoute) homeRoute.value = first.route;
+      drawMap("mobileMap", first.route);
+    }
   }
 
   function findNearestRoute(lat, lon) {
@@ -810,10 +812,7 @@
     await refreshData();
     renderOperator();
     await initRoutesAdmin();
-    qs("seedOperator").addEventListener("click", async () => {
-      await seedDemoData();
-      renderOperator();
-    });
+    initOperatorTabs();
     qs("refreshOperator").addEventListener("click", async () => {
       await refreshData();
       renderOperator();
@@ -822,6 +821,22 @@
       await refreshData();
       renderOperator();
     }, 5000);
+  }
+
+  function initOperatorTabs() {
+    document.querySelectorAll(".ops-tabs button").forEach(button => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".ops-tabs button").forEach(item => item.classList.remove("active"));
+        document.querySelectorAll(".ops-tab-panel").forEach(item => item.classList.remove("active"));
+        button.classList.add("active");
+        qs(button.dataset.opsTab).classList.add("active");
+        setTimeout(() => {
+          Object.values(state.maps).forEach(map => {
+            try { map.invalidateSize(); } catch (e) {}
+          });
+        }, 100);
+      });
+    });
   }
 
   async function createAlert(vehicle_id, route, message) {
