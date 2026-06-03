@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LoadSense Operator</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  </head>
+  <body class="operator-page">
+    <header class="operator-header">
+      <div>
+        <p class="eyebrow">LoadSense Operator</p>
+        <h1>Fleet operations console</h1>
+      </div>
+      <div class="operator-actions">
+        <a class="button secondary" href="mobile.html">Commuter App</a>
+        <button id="seedOperator" class="button primary">Seed Demo Data</button>
+      </div>
+    </header>
+
+    <main class="operator-shell">
+      <section class="ops-metrics">
+        <article>
+          <span>Reporting vehicles</span>
+          <strong id="opVehicleCount">0</strong>
+        </article>
+        <article>
+          <span>Active alerts</span>
+          <strong id="opAlertCount">0</strong>
+        </article>
+        <article>
+          <span>Average load</span>
+          <strong id="opAvgLoad">0</strong>
+        </article>
+        <article>
+          <span>Overloaded</span>
+          <strong id="opOverloaded">0</strong>
+        </article>
+      </section>
+
+      <section class="ops-map-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Network view</p>
+            <h2>Live PUV map</h2>
+          </div>
+          <button id="refreshOperator" class="text-button">Refresh</button>
+        </div>
+        <div id="operatorMap" class="live-map wide-map"></div>
+      </section>
+
+      <section class="ops-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Route database</p>
+            <h2>Manage routes</h2>
+          </div>
+        </div>
+        <div id="routesAdmin" class="routes-admin">
+          <form id="routeForm" class="login-form">
+            <label>
+              Route ID
+              <input id="routeId" />
+            </label>
+            <label>
+              Name
+              <input id="routeName" />
+            </label>
+            <label>
+              Polyline (lat,long per line)
+              <textarea id="routePolyline" rows="4" style="width:100%"></textarea>
+            </label>
+            <div style="display:flex;gap:8px">
+              <button id="saveRoute" class="button primary" type="button">Save route</button>
+              <button id="clearRoute" class="button secondary" type="button">Clear</button>
+            </div>
+          </form>
+          <div id="routesTable" style="margin-top:12px"></div>
+        </div>
+      </section>
+
+      <section class="ops-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Dispatch queue</p>
+            <h2>Fleet status</h2>
+          </div>
+        </div>
+        <div id="operatorFleet" class="fleet-table"></div>
+      </section>
+
+      <section class="ops-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Model output</p>
+            <h2>Demand forecast</h2>
+          </div>
+        </div>
+        <div id="forecastBars" class="forecast-bars"></div>
+        <p id="forecastMeta" class="muted"></p>
+      </section>
+
+      <section class="ops-panel alerts-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Operator-first verification</p>
+            <h2>Safety and route alerts</h2>
+          </div>
+        </div>
+        <div id="operatorAlerts" class="alert-list"></div>
+      </section>
+
+      <section class="ops-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Cloud database</p>
+            <h2>Persisted demo records</h2>
+          </div>
+        </div>
+        <div id="databaseStatus" class="db-grid"></div>
+      </section>
+
+      <section class="ops-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Historical incident flagging</p>
+            <h2>Incident log</h2>
+          </div>
+        </div>
+        <div id="incidentLog" class="incident-list"></div>
+      </section>
+
+      <section class="ops-panel edge-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Edge demo boundary</p>
+            <h2>Line-crossing counter</h2>
+          </div>
+        </div>
+        <p>
+          Keep the line-crossing counter as a separate edge program for the demo.
+          It represents the camera + YOLO device and exports frame-level occupancy
+          evidence before telemetry reaches this cloud console.
+        </p>
+        <code>python edge\line_crossing_counter.py --frames 240</code>
+      </section>
+    </main>
+    <script src="demo.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+      window.LoadSense.initOperator();
+    </script>
+  </body>
+</html>

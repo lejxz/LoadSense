@@ -8,6 +8,7 @@ from backend.app.core.config import default_route, get_config
 from backend.app.core.compat import model_to_dict, validate_model
 from backend.app.core.phase2 import load_demand_forecast, predict_eta_details
 from backend.app.core.routes import list_routes
+from backend.app.db import sqlite_store
 from backend.app.core.state import fleet_store
 
 router = APIRouter()
@@ -88,9 +89,55 @@ def acknowledge_alert(alert_id: str):
     return alert
 
 
+@router.get("/incidents")
+def get_incidents(limit: int = 50):
+    return {"incidents": fleet_store.incidents(limit=limit)}
+
+
+@router.get("/database/status")
+def get_database_status():
+    return fleet_store.database_status()
+
+
 @router.get("/routes")
 def get_routes():
+    # prefer database-backed routes when available
+    try:
+        db_routes = sqlite_store.load_routes()
+        if db_routes:
+            return {"routes": db_routes}
+    except Exception:
+        pass
     return {"routes": list_routes()}
+
+
+class RoutePayload(BaseModel):
+    route: str
+    name: str
+    polyline: list[list[float]]
+
+
+@router.post("/routes")
+def post_route(payload: RoutePayload):
+    try:
+        # save to DB
+        sqlite_store.save_route(payload.route, payload.name, [(lat, lon) for lat, lon in payload.polyline])
+        return {"status": "ok", "route": payload.route}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/routes/{route}")
+def delete_route(route: str):
+    try:
+        # simple delete using sqlite
+        sqlite_store.init_db()
+        conn = sqlite_store._connect()
+        with conn:
+            conn.execute("DELETE FROM routes WHERE route = ?", (route,))
+        return {"status": "deleted", "route": route}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/config")

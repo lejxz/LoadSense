@@ -392,6 +392,79 @@
     renderForecast();
     renderDatabaseStatus();
     renderIncidentLog();
+    renderRoutesAdmin();
+  }
+
+  function renderRoutesAdmin() {
+    const container = qs('routesTable');
+    if (!container) return;
+    if (!state.routes || !state.routes.length) {
+      container.innerHTML = '<p class="empty-copy">No routes found.</p>';
+      return;
+    }
+    container.innerHTML = state.routes.map(r => `
+      <article class="route-card">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <h3>${escapeHtml(r.route)} ${escapeHtml(r.name)}</h3>
+            <p>${(r.stops||[]).length} stops</p>
+          </div>
+          <div>
+            <button class="button secondary edit-route" data-route="${escapeHtml(r.route)}">Edit</button>
+            <button class="button" style="background:#f8d7da;color:#7a191b;margin-left:8px" data-route="${escapeHtml(r.route)}" class="delete-route">Delete</button>
+          </div>
+        </div>
+      </article>
+    `).join('');
+    document.querySelectorAll('.edit-route').forEach(btn => btn.addEventListener('click', e => {
+      const route = btn.dataset.route;
+      const r = state.routes.find(x => x.route === route);
+      if (!r) return;
+      qs('routeId').value = r.route;
+      qs('routeName').value = r.name;
+      qs('routePolyline').value = (r.polyline || []).map(p => `${p.latitude},${p.longitude}`).join('\n');
+    }));
+    document.querySelectorAll('[data-route]').forEach(btn => {
+      if (btn.classList.contains('delete-route') || btn.textContent.trim().toLowerCase()==='delete') {
+        btn.addEventListener('click', async () => {
+          const route = btn.dataset.route;
+          if (!confirm(`Delete route ${route}?`)) return;
+          await fetch(api + `/routes/${route}`, { method: 'DELETE' });
+          await refreshData();
+          renderOperator();
+        });
+      }
+    });
+  }
+
+  async function initRoutesAdmin() {
+    const save = qs('saveRoute');
+    const clear = qs('clearRoute');
+    if (save) {
+      save.addEventListener('click', async () => {
+        const route = qs('routeId').value.trim();
+        const name = qs('routeName').value.trim();
+        const polytext = qs('routePolyline').value.trim();
+        if (!route || !name) { alert('Route and name required'); return; }
+        const poly = polytext.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
+          const [lat, lon] = line.split(',').map(s => parseFloat(s.trim()));
+          return [lat, lon];
+        });
+        await fetch(api + '/routes', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ route, name, polyline: poly }) });
+        qs('routeId').value = '';
+        qs('routeName').value = '';
+        qs('routePolyline').value = '';
+        await refreshData();
+        renderOperator();
+      });
+    }
+    if (clear) {
+      clear.addEventListener('click', () => {
+        qs('routeId').value = '';
+        qs('routeName').value = '';
+        qs('routePolyline').value = '';
+      });
+    }
   }
 
   function renderDatabaseStatus() {
@@ -423,6 +496,7 @@
   async function initOperator() {
     await refreshData();
     renderOperator();
+    await initRoutesAdmin();
     qs("seedOperator").addEventListener("click", async () => {
       await seedDemoData();
       renderOperator();
