@@ -5,10 +5,12 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from backend.app.core.compat import model_to_dict
+from backend.app.core.config import config_value
 from backend.app.core.occupancy import DEFAULT_CAPACITY, get_occupancy_tier
 from backend.app.core.phase2 import predict_eta_details
 from backend.app.core.route_deviation import detect_route_deviation
 from backend.app.core.routes import nearest_stop_id
+from backend.app.db import sqlite_store
 from backend.app.db.models import OperatorAlert, VehicleState
 
 
@@ -25,10 +27,14 @@ def parse_timestamp(value: str) -> datetime:
 
 class FleetStore:
     def __init__(self) -> None:
-        self._vehicles: Dict[str, VehicleState] = {}
-        self._alerts: List[OperatorAlert] = []
+        sqlite_store.init_db()
+        self._vehicles: Dict[str, VehicleState] = {
+            vehicle.vehicle_id: vehicle for vehicle in sqlite_store.load_vehicle_states()
+        }
+        self._alerts: List[OperatorAlert] = sqlite_store.load_alerts()
 
     def upsert_telemetry(self, payload: Any) -> VehicleState:
+        previous = self._vehicles.get(payload.vehicle_id)
         tier = get_occupancy_tier(payload.occupancy, DEFAULT_CAPACITY)
         deviation = detect_route_deviation(payload.latitude, payload.longitude, payload.route)
         stop_id = nearest_stop_id(payload.route, payload.latitude, payload.longitude)
@@ -60,7 +66,9 @@ class FleetStore:
             heading=getattr(payload, "heading", None),
         )
         self._vehicles[state.vehicle_id] = state
-        self._raise_alerts(state)
+        received_at = datetime.now(UTC).isoformat()
+        sqlite_store.save_vehicle_state(state, received_at=received_at)
+        self._raise_alerts(state, previous)
         return state
 
     def fleet(self) -> List[VehicleState]:
@@ -74,6 +82,7 @@ class FleetStore:
         for alert in self._alerts:
             if alert.id == alert_id:
                 alert.acknowledged = True
+                sqlite_store.acknowledge_alert(alert_id, datetime.now(UTC).isoformat())
                 return alert
         return None
 
@@ -99,6 +108,7 @@ class FleetStore:
         if "least" in query.lower() or "crowd" in query.lower():
             answer += " This is currently the least crowded option in the live fleet."
 
+        sqlite_store.save_chat_query(route, query, answer, datetime.now(UTC).isoformat())
         return {
             "route": route,
             "answer": answer,
@@ -119,7 +129,13 @@ class FleetStore:
             else 0.0,
         }
 
-    def _raise_alerts(self, state: VehicleState) -> None:
+    def incidents(self, limit: int = 50) -> List[Dict[str, Any]]:
+        return sqlite_store.list_incidents(limit=limit)
+
+    def database_status(self) -> Dict[str, Any]:
+        return sqlite_store.database_status()
+
+    def _raise_alerts(self, state: VehicleState, previous: Optional[VehicleState] = None) -> None:
         if state.tier == "blinking_red":
             self._append_alert(
                 "high",
@@ -138,21 +154,35 @@ class FleetStore:
                 state,
                 f"{state.vehicle_id} reports {state.signal_quality.replace('_', ' ')} signal quality.",
             )
+        if state.speed_kph is not None and state.speed_kph > float(config_value("safety", "speed_limit_kph", default=60)):
+            self._append_alert(
+                "medium",
+                state,
+                f"{state.vehicle_id} is overspeeding at {state.speed_kph:.1f} kph.",
+            )
+        if previous and previous.speed_kph is not None and state.speed_kph is not None:
+            delta = previous.speed_kph - state.speed_kph
+            if delta >= float(config_value("safety", "sudden_stop_delta_kph", default=25)):
+                self._append_alert(
+                    "medium",
+                    state,
+                    f"{state.vehicle_id} reports sudden deceleration of {delta:.1f} kph.",
+                )
 
     def _append_alert(self, severity: str, state: VehicleState, message: str) -> None:
-        duplicate = next((alert for alert in self._alerts[:8] if alert.vehicle_id == state.vehicle_id and alert.message == message), None)
+        duplicate = next((alert for alert in self._alerts if not alert.acknowledged and alert.vehicle_id == state.vehicle_id and alert.message == message), None)
         if duplicate:
             return
-        self._alerts.append(
-            OperatorAlert(
-                id=str(uuid4()),
-                severity=severity,
-                vehicle_id=state.vehicle_id,
-                route=state.route,
-                message=message,
-                timestamp=datetime.now(UTC).isoformat(),
-            )
+        alert = OperatorAlert(
+            id=str(uuid4()),
+            severity=severity,
+            vehicle_id=state.vehicle_id,
+            route=state.route,
+            message=message,
+            timestamp=datetime.now(UTC).isoformat(),
         )
+        self._alerts.append(alert)
+        sqlite_store.save_alert(alert)
         self._alerts = self._alerts[-100:]
 
     @staticmethod

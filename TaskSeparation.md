@@ -1,57 +1,88 @@
-# LoadSense Prototype Task Breakdown (Software-Only)
+# LoadSense Task Separation
 
-> Hardware-free hackathon sprint. The edge layer is simulated via mock data and laptop inference.
+This prototype is intentionally split into independently demoable layers.
 
----
+## Edge Counting Demo
 
-## Legend
-- `[SIMULATED]` — replaces hardware with mock data
-- `[CORE LOGIC]` — actual model/backend code
-- `[UI/DEMO]` — frontend & visualization
-- `[WRAP-UP]` — polish & pitch
+Purpose: prove the vehicle-side occupancy contract.
 
----
+Files:
 
-## Phase 1 — Foundation: Mock Data + Project Setup
+- `edge/line_crossing_counter.py`
+- `data/edge_line_crossing_counts.csv`
 
-1. `[WRAP-UP]` Set up Python project structure: `edge/`, `cloud/`, `app/` folders with a shared `requirements.txt`
-2. `[SIMULATED]` Write a **mock telemetry generator** — a script that outputs fake GPS coordinates + occupancy counts (0–16) to a JSON/WebSocket stream, simulating the Raspberry Pi feed
-3. `[CORE LOGIC]` Define occupancy thresholds in a config: Green ≤50%, Yellow ≤75%, Red ≤100%, Blinking Red >100%
-4. `[SIMULATED]` Generate or download a CSV of **synthetic historical occupancy logs** (timestamps + route + count) — at least 500 rows — to train ETA and demand models later
+Run:
 
----
+```powershell
+venv\Scripts\python.exe edge\line_crossing_counter.py --frames 240 --output data\edge_line_crossing_counts.csv
+```
 
-## Phase 2 — Cloud Backend: ETA + Demand Models (FastAPI)
+Shows:
 
-5. `[CORE LOGIC]` Train a **Gradient Boosting ETA model** (XGBoost/scikit-learn) on the synthetic CSV — features: GPS stop index, time-of-day, simulated traffic factor. Export as `.pkl`
-6. `[CORE LOGIC]` Train a **Facebook Prophet demand forecast model** on the same CSV — output: predicted load per stop per hour. Export forecasts as a JSON file for the dashboard
-7. `[CORE LOGIC]` Build a **FastAPI server** with three endpoints: `POST /telemetry` (receives mock GPS+occupancy), `GET /eta/{stop_id}`, `GET /demand`
-8. `[CORE LOGIC]` Add a simple **route deviation check**: if the incoming GPS coordinate deviates >200m from the expected polyline, flag it as an anomaly in the response JSON
+- bidirectional line crossing
+- running passenger count
+- occupancy tier
+- simulated density zone
+- LED state contract
 
----
+## Interface Demo
 
-## Phase 3 — Edge Simulation: YOLOv8-nano Inference (Laptop/Colab)
+Purpose: prove the commuter and operator product surfaces.
 
-9. `[CORE LOGIC]` Run **YOLOv8-nano on a sample video** (a crowd/street clip from YouTube or your own footage) using Ultralytics Python SDK — count detected persons per frame and output counts to a CSV. This is your "edge AI" demo evidence
-10. `[CORE LOGIC]` Write a **bidirectional line-crossing counter** script: define a horizontal line across the video frame, count persons crossing up vs. down, derive a running passenger count
-11. `[SIMULATED]` Map the running count to the occupancy tier (Green/Yellow/Red/Blinking Red) and log state changes — this output feeds the LED simulation in the frontend
+Files:
 
----
+- `app/index.html`
+- `app/mobile.html`
+- `app/operator.html`
+- `app/demo.js`
+- `app/styles.css`
 
-## Phase 4 — Frontend Prototype: Commuter App + Operator Dashboard
+Run:
 
-12. `[UI/DEMO]` Build a **commuter web app** (React Native Web or plain React) with: a route map (Leaflet.js), stop-level ETA from the FastAPI endpoint, and occupancy badge per vehicle
-13. `[UI/DEMO]` Add an **LED strip visual** on the app — a horizontal bar that animates Green → Yellow → Red → Blinking Red based on live occupancy state from the mock telemetry stream
-14. `[UI/DEMO]` Build an **operator dashboard** (separate page/tab): fleet list with occupancy status, demand forecast chart (Recharts/Chart.js from your Prophet output), and anomaly alerts panel
-15. `[UI/DEMO]` Add an **NLP chatbot widget** (call an LLM API — OpenAI or Claude) that answers commuter queries like "Which jeepney is least crowded for Route 04-L right now?" using occupancy + ETA context injected into the system prompt
+```powershell
+$env:PYTHONPATH='.'; venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload
+```
 
----
+Open:
 
-## Phase 5 — Integration + Demo: End-to-End Run + Pitch Video
+```text
+http://localhost:8000/mobile.html
+http://localhost:8000/operator.html
+```
 
-16. `[CORE LOGIC]` Wire everything together: mock telemetry script → FastAPI → React dashboard running simultaneously. Confirm occupancy updates reflect in LED, ETA, and operator dashboard in near-real-time
-17. `[WRAP-UP]` Run the YOLOv8 video through your counter, narrate the output as "what would happen on a real jeepney" — screenshot or screen-record the person count changing tiers
-18. `[WRAP-UP]` Record the **demo video**: show the commuter app, the live LED simulation, the operator dashboard (with demand forecast), and a chatbot query — voice-over or on-screen captions
-19. `[WRAP-UP]` Prepare pitch slides: Problem → Solution → Architecture diagram → Live demo screenshots → SDG alignment → ASEAN scalability. Keep to 5–7 slides
+Shows:
 
----
+- mobile login
+- commuter home
+- mobile map
+- route list
+- chatbot tab
+- operator fleet console
+- demand forecast
+- operator-first safety verification
+- database status and incident logs
+
+## Backend And Database Demo
+
+Purpose: prove telemetry processing, persistence, and cloud logic.
+
+Files:
+
+- `backend/app/api/routes.py`
+- `backend/app/core/state.py`
+- `backend/app/db/sqlite_store.py`
+- `data/loadsense_demo.sqlite`
+
+Endpoints:
+
+- `POST /api/telemetry`
+- `GET /api/fleet`
+- `GET /api/alerts`
+- `POST /api/alerts/{alert_id}/ack`
+- `GET /api/incidents`
+- `GET /api/database/status`
+- `POST /api/chatbot`
+- `GET /api/routes`
+- `GET /api/demand`
+
+Boundary rule: the edge counter should not be embedded inside the browser UI. It is a separate vehicle-side process in the architecture diagram.

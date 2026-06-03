@@ -64,9 +64,14 @@
     "demand_forecast": "cloud/artifacts/demand_forecast.json"
   },
   "data": {
+    "database": "data/loadsense_demo.sqlite",
     "synthetic_history": "data/synthetic_occupancy_logs.csv",
     "edge_counter_output": "data/edge_line_crossing_counts.csv",
     "synthetic_rows": 500
+  },
+  "safety": {
+    "speed_limit_kph": 60,
+    "sudden_stop_delta_kph": 25
   },
   "mock_telemetry": {
     "vehicle_id": "J-001",

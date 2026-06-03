@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LoadSense Commuter</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
@@ -34,7 +37,6 @@
             <p class="eyebrow">Good morning</p>
             <h1 id="mobileRouteTitle">Route 04L</h1>
           </div>
-        </header>
         </header>
 
         <section class="tab-panel active" id="homeTab">
@@ -83,8 +85,9 @@
             <select id="mapRoute"></select>
           </div>
           <div id="mobileMap" class="live-map">
-            <button id="recenterBtn" class="map-recenter" title="Center map on my location">📍</button>
+            <button id="recenterBtn" class="map-recenter" title="Center map on my location" aria-label="Center map on my location">+</button>
           </div>
+          <div id="destinationConfirm" class="destination-confirm hidden"></div>
           <div class="map-legend">
             <span><i class="dot green-dot"></i>Seats</span>
             <span><i class="dot yellow-dot"></i>Standing</span>
@@ -127,6 +130,7 @@
     </main>
     <script src="demo.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script>
       window.LoadSense.initMobile();
     </script>

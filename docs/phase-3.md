@@ -5,7 +5,7 @@ Status: complete for software-only demo
 ## What Phase 3 Adds
 
 - `edge/mock_telemetry.py` simulates GPS and occupancy payloads from a vehicle.
-- `edge/line_crossing_counter.py` simulates a bidirectional line-crossing passenger counter.
+- `edge/line_crossing_counter.py` simulates a bidirectional line-crossing passenger counter and simple density zones.
 - `data/edge_line_crossing_counts.csv` stores generated frame-level count evidence.
 
 ## Run Mock Telemetry
@@ -34,7 +34,7 @@ venv\Scripts\python.exe edge\mock_telemetry.py --mode ws --url ws://localhost:80
 venv\Scripts\python.exe edge\line_crossing_counter.py --frames 240 --output data\edge_line_crossing_counts.csv
 ```
 
-The CSV contains frame number, simulated centroid position, crossing direction, running passenger count, and LED tier.
+The CSV contains frame number, simulated centroid position, density zone, crossing direction, running passenger count, and LED tier.
 
 ## Hardware Boundary
 

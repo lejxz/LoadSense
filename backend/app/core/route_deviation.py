@@ -2,6 +2,7 @@ import math
 from typing import Dict, Tuple
 
 from backend.app.core.config import config_value, route_polylines
+from backend.app.db import sqlite_store
 
 
 RoutePoint = Tuple[float, float]
@@ -35,7 +36,7 @@ def _distance_point_to_segment(point: RoutePoint, start: RoutePoint, end: RouteP
 
 
 def distance_to_route_meters(latitude: float, longitude: float, route: str) -> float:
-    points = ROUTE_POLYLINES.get(route)
+    points = ROUTE_POLYLINES.get(route) or sqlite_store.load_route_polyline(route)
     if not points:
         raise KeyError(f"unknown route '{route}'")
 

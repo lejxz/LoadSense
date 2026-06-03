@@ -8,3 +8,4 @@ prophet
 websockets
 python-dotenv
 ultralytics
+python-multipart

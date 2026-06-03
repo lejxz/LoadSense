@@ -8,10 +8,11 @@ Status: complete
 - `cloud/` with training scripts and checked-in artifacts
 - `backend/app/main.py` with a `/health` endpoint
 - `backend/app/api/routes.py` with telemetry, ETA, demand, fleet, route, alert, chatbot, and WebSocket telemetry routes
+- `backend/app/db/sqlite_store.py` with local SQLite persistence
 - `backend/app/core/occupancy.py` with shared occupancy thresholds and tier logic
 - `edge/mock_telemetry.py` with stdout, HTTP, and WebSocket mock telemetry modes
 - `data/generate_synthetic_history.py` for producing synthetic occupancy logs
-- `app/index.html` as the commuter/operator frontend
+- `app/index.html` as a role launcher for separated commuter and operator frontends
 
 ## Phase 1 Goal
 
@@ -19,7 +20,7 @@ Build the base data flow for the prototype:
 
 1. Generate mock telemetry.
 2. Send it to the backend.
-3. Keep a simple, visible project structure for later ETA, demand, and dashboard work.
+3. Persist telemetry, latest fleet state, alerts, feedback, and chatbot logs for demo review.
 
 ## Run It
 

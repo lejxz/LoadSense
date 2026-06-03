@@ -8,8 +8,8 @@ Status: complete
 - A Prophet-based demand forecast JSON artifact for the dashboard
 - A route deviation anomaly check in the telemetry endpoint
 - API endpoints that read the generated artifacts when available
-- A stateful fleet store that keeps the latest telemetry per vehicle
-- Operator-first alerts for overload, route deviation, and signal quality issues
+- A persistent fleet store that keeps the latest telemetry per vehicle in SQLite
+- Operator-first alerts for overload, route deviation, signal quality, overspeeding, and sudden-stop issues
 
 ## Run Steps
 
@@ -65,6 +65,13 @@ Check alerts:
 
 ```powershell
 Invoke-RestMethod "http://localhost:8000/api/alerts"
+```
+
+Check persisted database state:
+
+```powershell
+Invoke-RestMethod "http://localhost:8000/api/database/status"
+Invoke-RestMethod "http://localhost:8000/api/incidents"
 ```
 
 Ask for a boarding recommendation:

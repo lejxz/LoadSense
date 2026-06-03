@@ -20,12 +20,13 @@ body {
   margin: 0;
   color: var(--ink);
   background: var(--wash);
-  font-family: Inter, Segoe UI, Arial, sans-serif;
+  font-family: Manrope, "Aptos", "Segoe UI", Arial, sans-serif;
 }
 
 h1, h2, h3, h4, p { margin: 0; }
+h1, h2, h3, h4 { font-family: Sora, Manrope, "Segoe UI", sans-serif; }
 p { color: var(--muted); line-height: 1.45; }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 
 .hidden { display: none !important; }
@@ -124,7 +125,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   display: grid;
   place-items: center;
   padding: 24px;
-  background: #dae7e5;
+  background: #dce8e3;
 }
 
 .phone-frame {
@@ -152,7 +153,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   display: grid;
   align-content: space-between;
   background:
-    linear-gradient(160deg, rgba(8,123,104,.95), rgba(47,95,152,.92)),
+    linear-gradient(160deg, rgba(12,108,93,.96), rgba(20,79,122,.93)),
     #0b705f;
   color: #fff;
 }
@@ -193,6 +194,14 @@ input, select {
   background: #fff;
   color: var(--ink);
 }
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: #fff;
+  color: var(--ink);
+}
 
 .app-screen {
   height: 100%;
@@ -217,7 +226,8 @@ input, select {
 
 /* Make map tab full-screen within phone frame */
 .tab-panel#mapTab .live-map {
-  height: calc(100vh - 280px);
+  height: calc(100vh - 245px);
+  min-height: 450px;
 }
 
 .hero-card, .quick-grid article, .vehicle-card, .route-card, .chat-header {
@@ -257,6 +267,22 @@ input, select {
 .vehicle-card h4 { font-size: 15px; }
 .vehicle-card h4 span { color: var(--muted); font-weight: 700; }
 .vehicle-card p { font-size: 13px; }
+.vehicle-card-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+.mini-action {
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--teal-dark);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  padding: 0 10px;
+}
 
 .occupancy-pill {
   display: inline-flex;
@@ -287,6 +313,27 @@ input, select {
   border-radius: 8px;
   overflow: hidden;
   background: #e9f1f1;
+}
+.leaflet-container {
+  font-family: Manrope, "Segoe UI", Arial, sans-serif;
+}
+.leaflet-tile-pane {
+  filter: saturate(0.86) contrast(1.02);
+}
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  box-shadow: 0 16px 42px rgba(24, 37, 45, 0.18);
+}
+.leaflet-popup-content button {
+  border: 0;
+  border-radius: 8px;
+  background: var(--teal);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+  margin-top: 8px;
+  min-height: 32px;
+  padding: 0 10px;
 }
 .live-map { position: relative; }
 .live-map svg { width: 100%; height: 100%; display: block; }
@@ -328,6 +375,7 @@ input, select {
   place-items: center;
   cursor: pointer;
   font-size: 18px;
+  font-weight: 900;
 }
 
 .vehicle-div-icon { display: block; width: 18px; height: 18px; border-radius: 9px; border: 2px solid #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
@@ -345,6 +393,47 @@ input, select {
 .green-dot { background: #16865d; }
 .yellow-dot { background: var(--amber); }
 .red-dot { background: var(--red); }
+
+.marker-cluster-small, .marker-cluster-medium, .marker-cluster-large {
+  background: rgba(8, 123, 104, 0.22);
+}
+.marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+  background: var(--teal);
+  color: #fff;
+  font-family: Sora, Manrope, sans-serif;
+  font-weight: 900;
+}
+.destination-marker span {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border: 3px solid #fff;
+  border-radius: 50% 50% 50% 0;
+  background: #0f766e;
+  box-shadow: 0 8px 20px rgba(15, 118, 110, 0.35);
+  transform: rotate(-45deg);
+}
+
+.destination-confirm {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  gap: 8px;
+}
+.destination-confirm strong {
+  font-family: Sora, Manrope, sans-serif;
+}
+.destination-confirm code {
+  color: var(--muted);
+  font-family: Consolas, monospace;
+  font-size: 12px;
+}
+.destination-confirm .button {
+  width: fit-content;
+}
 
 .route-card { padding: 14px; }
 .route-card h3 { font-size: 16px; }
@@ -442,7 +531,7 @@ input, select {
 .fleet-table { display: grid; gap: 8px; }
 .fleet-table article {
   display: grid;
-  grid-template-columns: 1.3fr .55fr .55fr auto .7fr;
+  grid-template-columns: 1.3fr .55fr .55fr auto .7fr auto;
   align-items: center;
   gap: 10px;
   padding: 12px;
@@ -529,6 +618,46 @@ input, select {
 .incident-list h3 { font-size: 14px; }
 .incident-list p, .incident-list span { font-size: 13px; color: var(--muted); }
 
+.file-import-panel {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fbfa;
+}
+.import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 800;
+}
+.checkbox-row input {
+  width: auto;
+}
+.import-preview {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+}
+.import-preview article {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.import-preview .error {
+  color: var(--red);
+  font-weight: 800;
+}
+
 @media (max-width: 980px) {
   .portal-shell, .operator-shell { grid-template-columns: 1fr; }
   .ops-metrics { grid-template-columns: repeat(2, 1fr); }
@@ -550,4 +679,8 @@ input, select {
   .portal-hero { padding: 24px; }
   .operator-shell { width: calc(100vw - 20px); }
   .ops-metrics { grid-template-columns: 1fr; }
+  .tab-panel#mapTab .live-map {
+    height: calc(100vh - 215px);
+    min-height: 380px;
+  }
 }

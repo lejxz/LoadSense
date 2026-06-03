@@ -2,13 +2,14 @@ from typing import List
 
 from backend.app.core.config import default_route, route_names
 from backend.app.core.route_deviation import ROUTE_POLYLINES
+from backend.app.db import sqlite_store
 
 
 ROUTE_NAMES = route_names()
 
 
 def get_route_stops(route: str) -> List[dict]:
-    points = ROUTE_POLYLINES.get(route, ROUTE_POLYLINES[default_route()])
+    points = ROUTE_POLYLINES.get(route) or sqlite_store.load_route_polyline(route) or ROUTE_POLYLINES[default_route()]
     return [
         {
             "stop_id": index,

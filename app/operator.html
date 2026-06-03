@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>LoadSense Operator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
@@ -50,7 +53,7 @@
           <button id="refreshOperator" class="text-button">Refresh</button>
         </div>
         <div id="operatorMap" class="live-map wide-map">
-          <button id="opRecenterBtn" class="map-recenter" title="Center map on fleet or my location">📍</button>
+          <button id="opRecenterBtn" class="map-recenter" title="Center map on fleet or my location" aria-label="Center map on fleet or my location">+</button>
         </div>
       </section>
 
@@ -83,6 +86,21 @@
           <div style="display:flex;gap:8px;margin-top:8px">
             <button id="exportRoutes" class="button secondary">Export routes (JSON)</button>
             <button id="importRoutesBtn" class="button">Import routes (JSON)</button>
+          </div>
+          <div class="file-import-panel">
+            <label>
+              Route file upload
+              <input id="routeFile" type="file" accept=".geojson,.json,.csv,.zip" />
+            </label>
+            <div class="import-actions">
+              <button id="previewRouteFile" class="button secondary" type="button">Preview file</button>
+              <button id="commitRouteFile" class="button primary" type="button">Commit file</button>
+            </div>
+            <label class="checkbox-row">
+              <input id="replaceRoutes" type="checkbox" />
+              Replace matching route IDs
+            </label>
+            <div id="routeImportPreview" class="import-preview"></div>
           </div>
           <textarea id="importRoutes" placeholder='Paste JSON array of routes here (route,name,polyline)' style="width:100%;height:110px;margin-top:8px;display:none"></textarea>
           <div id="routesTable" style="margin-top:12px"></div>
@@ -140,23 +158,10 @@
         <div id="incidentLog" class="incident-list"></div>
       </section>
 
-      <section class="ops-panel edge-panel">
-        <div class="section-head">
-          <div>
-            <p class="eyebrow">Edge demo boundary</p>
-            <h2>Line-crossing counter</h2>
-          </div>
-        </div>
-        <p>
-          Keep the line-crossing counter as a separate edge program for the demo.
-          It represents the camera + YOLO device and exports frame-level occupancy
-          evidence before telemetry reaches this cloud console.
-        </p>
-        <code>python edge\line_crossing_counter.py --frames 240</code>
-      </section>
     </main>
     <script src="demo.js"></script>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
     <script>
       window.LoadSense.initOperator();
     </script>

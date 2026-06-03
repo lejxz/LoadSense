@@ -228,6 +228,18 @@ def save_chat_query(route: str, query: str, answer: str, timestamp: str) -> None
         )
 
 
+def save_operator_feedback(alert_id: str, vehicle_id: str, route: str, action: str, timestamp: str) -> None:
+    init_db()
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO operator_feedback (alert_id, vehicle_id, route, action, timestamp)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (alert_id, vehicle_id, route, action, timestamp),
+        )
+
+
 def load_vehicle_states() -> list[VehicleState]:
     init_db()
     with _connect() as conn:
@@ -279,6 +291,38 @@ def save_route(route: str, name: str, polyline: list[tuple[float, float]]):
             "INSERT OR REPLACE INTO routes (route, name, polyline_json) VALUES (?, ?, ?)",
             (route, name, json.dumps(polyline)),
         )
+
+
+def route_exists(route: str) -> bool:
+    init_db()
+    with _connect() as conn:
+        row = conn.execute("SELECT 1 FROM routes WHERE route = ?", (route,)).fetchone()
+    return row is not None
+
+
+def route_name_exists(name: str, exclude_route: str | None = None) -> bool:
+    init_db()
+    sql = "SELECT route FROM routes WHERE lower(name) = lower(?)"
+    params: tuple[Any, ...] = (name,)
+    if exclude_route:
+        sql += " AND route <> ?"
+        params = (name, exclude_route)
+    with _connect() as conn:
+        row = conn.execute(sql, params).fetchone()
+    return row is not None
+
+
+def load_route_polyline(route: str) -> list[tuple[float, float]]:
+    init_db()
+    with _connect() as conn:
+        row = conn.execute("SELECT polyline_json FROM routes WHERE route = ?", (route,)).fetchone()
+    if row is None:
+        return []
+    try:
+        points = json.loads(row["polyline_json"]) if row["polyline_json"] else []
+    except Exception:
+        return []
+    return [(float(lat), float(lon)) for lat, lon in points]
 
 
 def load_routes() -> list[dict[str, Any]]:

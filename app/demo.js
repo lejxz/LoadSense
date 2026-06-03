@@ -13,6 +13,8 @@
     mapClusters: {},
     geoWatchId: null,
     lastPosition: null,
+    selectedDestination: null,
+    selectedVehicleId: null,
   };
 
   const tierCopy = {
@@ -54,15 +56,34 @@
     return (rank[a.tier] ?? 9) - (rank[b.tier] ?? 9) || a.eta_minutes - b.eta_minutes;
   }
 
+  function isMapCoordinate(value) {
+    const lat = Number(value?.latitude);
+    const lon = Number(value?.longitude);
+    return Number.isFinite(lat) && Number.isFinite(lon) && lat >= 10.15 && lat <= 10.55 && lon >= 123.65 && lon <= 124.1;
+  }
+
+  function routePoint(route, ratio) {
+    const points = (route?.polyline || []).filter(isMapCoordinate);
+    if (!points.length) return null;
+    return points[Math.min(points.length - 1, Math.max(0, Math.floor(points.length * ratio)))];
+  }
+
   async function seedDemoData() {
+    if (!state.routes.length) await refreshData();
     const now = new Date().toISOString();
-    const payloads = [
-      ["J-214", "04L", 14.5992, 120.9840, 7, 21, "ok"],
-      ["J-102", "04L", 14.6001, 120.9850, 14, 18, "ok"],
-      ["J-330", "08A", 14.5996, 120.9846, 17, 14, "ok"],
-      ["J-417", "12B", 14.6100, 120.9950, 10, 24, "ok"],
-      ["J-808", "17C", 0, 0, 5, 0, "gps_dropout"],
-    ];
+    const routes = state.routes.filter(route => (route.polyline || []).some(isMapCoordinate)).slice(0, 5);
+    const payloads = routes.map((route, index) => {
+      const point = routePoint(route, 0.22 + index * 0.13) || { latitude: 10.3157, longitude: 123.8854 };
+      return [
+        `CEB-${String(index + 1).padStart(3, "0")}`,
+        route.route,
+        Number(point.latitude),
+        Number(point.longitude),
+        [6, 11, 15, 9, 13][index] || 8,
+        [18, 24, 16, 21, 14][index] || 16,
+        "ok",
+      ];
+    });
     for (const [vehicle_id, route, latitude, longitude, occupancy, speed_kph, signal_quality] of payloads) {
       await getJson("/telemetry", {
         method: "POST",
@@ -85,6 +106,9 @@
     state.vehicles = fleet.vehicles || [];
     state.summary = fleet.summary || {};
     state.routes = routes.routes || [];
+    if (state.routes.length && !state.routes.some(route => route.route === state.selectedRoute)) {
+      state.selectedRoute = state.routes[0].route;
+    }
     state.alerts = alerts.alerts || [];
     state.demand = demand || {};
     state.database = database || {};
@@ -135,16 +159,23 @@
     if (typeof L !== 'undefined') {
       // initialize map if needed
       if (!state.maps[containerId]) {
-        // default center near Cebu
-        const map = L.map(containerId, { zoomControl: false }).setView([14.5992, 120.9840], 13);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        const map = L.map(containerId, { zoomControl: false }).setView([10.3157, 123.8854], 13);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
           maxZoom: 19,
+          attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
         }).addTo(map);
         state.maps[containerId] = map;
         state.mapLayers[containerId] = L.layerGroup().addTo(map);
         // clustering layer
         try {
-          state.mapClusters[containerId] = L.markerClusterGroup();
+          state.mapClusters[containerId] = L.markerClusterGroup({
+            iconCreateFunction(cluster) {
+              const markers = cluster.getAllChildMarkers();
+              const overloaded = markers.filter(marker => marker.options.loadsenseTier === "blinking_red").length;
+              const label = overloaded ? `${markers.length}/${overloaded}` : String(markers.length);
+              return L.divIcon({ html: `<div><span>${label}</span></div>`, className: "marker-cluster marker-cluster-small", iconSize: L.point(40, 40) });
+            },
+          });
           state.mapClusters[containerId].addTo(map);
         } catch (e) {
           state.mapClusters[containerId] = null;
@@ -158,13 +189,12 @@
       if (clusterGroup && clusterGroup.clearLayers) clusterGroup.clearLayers();
 
       const routes = routeFilter ? state.routes.filter(route => route.route === routeFilter) : state.routes;
-      const pointsAll = [];
       // draw route polylines
       for (const route of routes) {
         const latlngs = (route.polyline || []).filter(p => Number(p.latitude) && Number(p.longitude)).map(p => [Number(p.latitude), Number(p.longitude)]);
         if (latlngs.length) {
-            const polyline = L.polyline(latlngs, { color: '#2f5f98', weight: 3 }).addTo(layerGroup);
-          pointsAll.push(...latlngs);
+            const selectedRoute = route.route === state.selectedRoute;
+            const polyline = L.polyline(latlngs, { color: selectedRoute ? '#0f766e' : '#5b8fc8', weight: selectedRoute ? 5 : 3, opacity: selectedRoute ? 0.92 : 0.55 }).addTo(layerGroup);
             // start and end markers
             const start = latlngs[0];
             const end = latlngs[latlngs.length-1];
@@ -188,8 +218,8 @@
         const lon = Number(vehicle.longitude);
         const tier = tierClass(vehicle.tier);
         const icon = L.divIcon({ className: 'vehicle-icon-wrapper', html: `<span class="vehicle-div-icon ${tier}"></span>`, iconSize: [18,18], iconAnchor: [9,9] });
-        const marker = L.marker([lat, lon], { icon });
-        const popup = `<strong>${escapeHtml(vehicle.vehicle_id)}</strong><br/>Route: ${escapeHtml(vehicle.route)}<br/>Load: ${escapeHtml(String(vehicle.occupancy))}/${escapeHtml(String(vehicle.capacity))}<br/>ETA: ${escapeHtml(String(vehicle.eta_minutes))} min<br/><button onclick="window.LoadSense.createAlert('${escapeHtml(vehicle.vehicle_id)}','${escapeHtml(vehicle.route)}')">Flag</button>`;
+        const marker = L.marker([lat, lon], { icon, loadsenseTier: vehicle.tier });
+        const popup = `<strong>${escapeHtml(vehicle.vehicle_id)}</strong><br/>Route: ${escapeHtml(vehicle.route)}<br/>Load: ${escapeHtml(String(vehicle.occupancy))}/${escapeHtml(String(vehicle.capacity))}<br/>ETA: ${escapeHtml(String(vehicle.eta_minutes))} min<br/><button onclick="window.LoadSense.zoomVehicle('${escapeHtml(vehicle.vehicle_id)}')">Zoom to PUV</button><button onclick="window.LoadSense.createAlert('${escapeHtml(vehicle.vehicle_id)}','${escapeHtml(vehicle.route)}')">Flag incident</button>`;
         marker.bindPopup(popup);
         marker.bindTooltip(`${escapeHtml(vehicle.vehicle_id)} (${escapeHtml(vehicle.route)})` , { permanent: false });
         if (clusterGroup) {
@@ -197,34 +227,15 @@
         } else {
           marker.addTo(layerGroup);
         }
-        pointsAll.push([lat, lon]);
       }
-      // adjust view to bounds if we have points
-      if (pointsAll.length) {
-        try {
-          const bounds = L.latLngBounds(pointsAll);
-          // ensure map has correct size before fitting bounds (handles hidden -> visible)
-          setTimeout(() => {
-            try {
-              map.invalidateSize();
-              map.fitBounds(bounds.pad ? bounds.pad(0.2) : bounds, { maxZoom: 16 });
-            } catch (e) {
-              // ignore
-            }
-          }, 150);
-        } catch (e) {
-          // ignore
-        }
-      } else {
-        // nothing to show - ensure map resizes correctly when visible
-        setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 150);
-      }
+      drawDestinationLayer(containerId, layerGroup);
+      setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 150);
       // map click on mobile map: set destination and suggest best PUV
       if (containerId === 'mobileMap') {
         map.off('click', map._ls_click_handler || (() => {}));
         map._ls_click_handler = function (e) {
           const lat = e.latlng.lat, lon = e.latlng.lng;
-          state.lastPosition = { latitude: lat, longitude: lon };
+          state.selectedDestination = { latitude: lat, longitude: lon };
           const nearest = findNearestRoute(lat, lon);
           if (nearest) state.selectedRoute = nearest;
           // find best vehicle for selected route
@@ -279,6 +290,18 @@
     `;
   }
 
+  function drawDestinationLayer(containerId, layerGroup) {
+    if (containerId !== "mobileMap" || typeof L === "undefined" || !state.selectedDestination) return;
+    const destination = [state.selectedDestination.latitude, state.selectedDestination.longitude];
+    L.marker(destination, {
+      icon: L.divIcon({ className: "destination-marker", html: "<span></span>", iconSize: [24, 24], iconAnchor: [12, 22] }),
+    }).bindTooltip("Destination").addTo(layerGroup);
+    const best = state.vehicles.filter(v => v.route === state.selectedRoute && Number(v.latitude) && Number(v.longitude)).sort(vehicleSort)[0];
+    if (best) {
+      L.polyline([[Number(best.latitude), Number(best.longitude)], destination], { color: "#0f766e", weight: 4, dashArray: "8 8", opacity: 0.8 }).addTo(layerGroup);
+    }
+  }
+
   function renderVehicleCard(vehicle) {
     return `
       <article class="vehicle-card">
@@ -287,7 +310,10 @@
           <p>${escapeHtml(routeName(vehicle.route))}</p>
           <p>ETA ${vehicle.eta_minutes} min to Stop ${Number(vehicle.next_stop_id) + 1} - ${vehicle.occupancy}/${vehicle.capacity} riders</p>
         </div>
-        <span class="occupancy-pill ${tierClass(vehicle.tier)}">${tierLabel(vehicle.tier)}</span>
+        <div class="vehicle-card-actions">
+          <span class="occupancy-pill ${tierClass(vehicle.tier)}">${tierLabel(vehicle.tier)}</span>
+          <button class="mini-action" data-zoom-vehicle="${escapeHtml(vehicle.vehicle_id)}">Zoom</button>
+        </div>
       </article>
     `;
   }
@@ -322,6 +348,9 @@
     qs("mobileFleet").innerHTML = routeVehicles.length
       ? routeVehicles.map(renderVehicleCard).join("")
       : `<p class="empty-copy">No live PUVs for Route ${escapeHtml(selected)}. Seed demo data or start mock telemetry.</p>`;
+    document.querySelectorAll("[data-zoom-vehicle]").forEach(button => {
+      button.addEventListener("click", () => zoomVehicle(button.dataset.zoomVehicle));
+    });
 
     if (best) {
       const safeText = best.route_deviation?.anomaly ? "Verify" : "Clear";
@@ -345,7 +374,38 @@
         </ol>
       </article>
     `).join("");
+    renderDestinationConfirm();
     drawMap("mobileMap", selected);
+  }
+
+  function renderDestinationConfirm() {
+    const panel = qs("destinationConfirm");
+    if (!panel) return;
+    if (!state.selectedDestination) {
+      panel.classList.add("hidden");
+      panel.innerHTML = "";
+      return;
+    }
+    const lat = state.selectedDestination.latitude.toFixed(5);
+    const lon = state.selectedDestination.longitude.toFixed(5);
+    const candidates = state.vehicles.filter(v => v.route === state.selectedRoute).sort(vehicleSort);
+    const best = candidates[0];
+    panel.classList.remove("hidden");
+    panel.innerHTML = `
+      <strong>Destination selected</strong>
+      <code>${lat}, ${lon}</code>
+      <p>${best ? `Suggested PUV ${escapeHtml(best.vehicle_id)} on Route ${escapeHtml(best.route)} - ETA ${escapeHtml(String(best.eta_minutes))} min.` : "No live PUVs are reporting on this route yet."}</p>
+      <button id="suggestDestinationPuv" class="button primary" type="button">Suggest PUV</button>
+    `;
+    qs("suggestDestinationPuv").addEventListener("click", async () => {
+      await refreshData();
+      renderMobile();
+      const map = state.maps.mobileMap;
+      const updated = state.vehicles.filter(v => v.route === state.selectedRoute).sort(vehicleSort)[0];
+      if (map && updated) {
+        L.popup().setLatLng([state.selectedDestination.latitude, state.selectedDestination.longitude]).setContent(`<b>Suggested PUV</b><br/>${escapeHtml(updated.vehicle_id)} - ETA ${updated.eta_minutes}m`).openOn(map);
+      }
+    });
   }
 
   async function askMobileChat(query) {
@@ -467,9 +527,13 @@
             <span>${vehicle.occupancy}/${vehicle.capacity}</span>
             <span class="occupancy-pill ${tierClass(vehicle.tier)}">${tierLabel(vehicle.tier)}</span>
             <span>${vehicle.route_deviation?.anomaly ? "Verify route" : "On route"}</span>
+            <button class="mini-action" data-zoom-vehicle="${escapeHtml(vehicle.vehicle_id)}">Zoom</button>
           </article>
         `).join("")
       : `<p class="empty-copy">No telemetry received yet.</p>`;
+    document.querySelectorAll("[data-zoom-vehicle]").forEach(button => {
+      button.addEventListener("click", () => zoomVehicle(button.dataset.zoomVehicle));
+    });
 
     qs("operatorAlerts").innerHTML = state.alerts.length
       ? state.alerts.map(alert => `
@@ -530,21 +594,42 @@
       if (state.lastPosition) {
         map.setView([state.lastPosition.latitude, state.lastPosition.longitude], 15);
       } else {
-        // fallback to fit to selected route
-        drawMap('mobileMap', state.selectedRoute);
+        fitRoute('mobileMap', state.selectedRoute);
       }
     });
     if (opRecenter) opRecenter.addEventListener('click', () => {
       const map = state.maps['operatorMap'];
       if (!map) return;
-      // center on fleet bounds
-      const pts = state.vehicles.filter(v => Number(v.latitude) && Number(v.longitude)).map(v => [Number(v.latitude), Number(v.longitude)]);
-      if (pts.length) {
-        try { map.fitBounds(L.latLngBounds(pts), { maxZoom: 14 }); } catch (e) {}
-      } else if (state.lastPosition) {
-        map.setView([state.lastPosition.latitude, state.lastPosition.longitude], 13);
-      }
+      fitFleet('operatorMap');
     });
+  }
+
+  function fitRoute(containerId, routeId) {
+    const map = state.maps[containerId];
+    const route = state.routes.find(item => item.route === routeId);
+    const points = (route?.polyline || []).filter(isMapCoordinate).map(point => [Number(point.latitude), Number(point.longitude)]);
+    if (map && points.length) {
+      try { map.fitBounds(L.latLngBounds(points), { maxZoom: 15, padding: [28, 28] }); } catch (e) {}
+    }
+  }
+
+  function fitFleet(containerId) {
+    const map = state.maps[containerId];
+    const points = state.vehicles.filter(isMapCoordinate).map(vehicle => [Number(vehicle.latitude), Number(vehicle.longitude)]);
+    if (map && points.length) {
+      try { map.fitBounds(L.latLngBounds(points), { maxZoom: 15, padding: [28, 28] }); } catch (e) {}
+    }
+  }
+
+  function zoomVehicle(vehicleId) {
+    const vehicle = state.vehicles.find(item => item.vehicle_id === vehicleId);
+    if (!vehicle || !isMapCoordinate(vehicle)) return;
+    state.selectedVehicleId = vehicleId;
+    state.selectedRoute = vehicle.route;
+    const map = state.maps.operatorMap || state.maps.mobileMap;
+    if (map) {
+      map.setView([Number(vehicle.latitude), Number(vehicle.longitude)], 17);
+    }
   }
 
   function renderRoutesAdmin() {
@@ -564,7 +649,7 @@
           <div>
             <button class="button secondary edit-route" data-route="${escapeHtml(r.route)}">Edit</button>
             <button class="button" style="background:#f0f4f8;color:#0b3550;margin-left:8px" data-route-preview="${escapeHtml(r.route)}">Preview</button>
-            <button class="button" style="background:#f8d7da;color:#7a191b;margin-left:8px" data-route="${escapeHtml(r.route)}" class="delete-route">Delete</button>
+            <button class="button delete-route" style="background:#f8d7da;color:#7a191b;margin-left:8px" data-route="${escapeHtml(r.route)}">Delete</button>
           </div>
         </div>
       </article>
@@ -580,6 +665,7 @@
     document.querySelectorAll('[data-route-preview]').forEach(btn => btn.addEventListener('click', e => {
       const route = btn.dataset.routePreview;
       drawMap('operatorMap', route);
+      setTimeout(() => fitRoute('operatorMap', route), 100);
     }));
     document.querySelectorAll('[data-route]').forEach(btn => {
       if (btn.classList.contains('delete-route') || btn.textContent.trim().toLowerCase()==='delete') {
@@ -600,6 +686,10 @@
     const exportBtn = qs('exportRoutes');
     const importBtn = qs('importRoutesBtn');
     const importArea = qs('importRoutes');
+    const routeFile = qs('routeFile');
+    const previewRouteFile = qs('previewRouteFile');
+    const commitRouteFile = qs('commitRouteFile');
+    const routeImportPreview = qs('routeImportPreview');
     if (save) {
       save.addEventListener('click', async () => {
         const route = qs('routeId').value.trim();
@@ -610,7 +700,9 @@
           const [lat, lon] = line.split(',').map(s => parseFloat(s.trim()));
           return [lat, lon];
         });
-        await fetch(api + '/routes', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ route, name, polyline: poly }) });
+        const replace = state.routes.some(r => r.route === route);
+        const response = await fetch(api + `/routes?replace=${replace ? 'true' : 'false'}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ route, name, polyline: poly }) });
+        if (!response.ok) { alert(await response.text()); return; }
         qs('routeId').value = '';
         qs('routeName').value = '';
         qs('routePolyline').value = '';
@@ -644,12 +736,48 @@
           if (!Array.isArray(json)) throw new Error('Expected array');
           for (const r of json) {
             const poly = (r.polyline || []).map(p => Array.isArray(p) ? p : [p.latitude, p.longitude]);
-            await fetch(api + '/routes', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ route: r.route, name: r.name, polyline: poly }) });
+            await fetch(api + '/routes?replace=true', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ route: r.route, name: r.name, polyline: poly }) });
           }
           await refreshData(); renderOperator();
         } catch (e) { alert('Invalid JSON: ' + e.message); }
       });
     }
+    async function uploadRouteFile(commit) {
+      if (!routeFile || !routeFile.files || !routeFile.files[0]) {
+        alert('Choose a GeoJSON, CSV, or GTFS zip file first.');
+        return;
+      }
+      const form = new FormData();
+      form.append('file', routeFile.files[0]);
+      form.append('commit', commit ? 'true' : 'false');
+      form.append('replace', qs('replaceRoutes')?.checked ? 'true' : 'false');
+      form.append('simplify_tolerance', '0.00002');
+      const response = await fetch(api + '/routes/import', { method: 'POST', body: form });
+      const result = await response.json();
+      if (!response.ok) {
+        routeImportPreview.innerHTML = `<p class="error">${escapeHtml(result.detail || 'Upload failed')}</p>`;
+        return;
+      }
+      routeImportPreview.innerHTML = renderImportResult(result);
+      if (commit && result.status === 'committed') {
+        await refreshData();
+        renderOperator();
+      }
+    }
+    if (previewRouteFile) previewRouteFile.addEventListener('click', () => uploadRouteFile(false));
+    if (commitRouteFile) commitRouteFile.addEventListener('click', () => uploadRouteFile(true));
+  }
+
+  function renderImportResult(result) {
+    const errors = result.errors || [];
+    const routes = result.routes || [];
+    if (errors.length) {
+      return `<p class="error">${errors.map(escapeHtml).join('<br/>')}</p>`;
+    }
+    return `
+      <p>${escapeHtml(result.status)} ${routes.length} route(s) from ${escapeHtml(result.filename || 'upload')}.</p>
+      ${routes.slice(0, 5).map(route => `<article><strong>${escapeHtml(route.route)} ${escapeHtml(route.name)}</strong><p>${(route.polyline || []).length} points</p></article>`).join('')}
+    `;
   }
 
   function renderDatabaseStatus() {
@@ -698,8 +826,18 @@
 
   async function createAlert(vehicle_id, route, message) {
     try {
-      const payload = { vehicle_id, route, message: message || `${vehicle_id} flagged by operator`, severity: 'medium' };
-      await fetch(api + '/alerts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const note = message || prompt(`Describe the incident for ${vehicle_id}`, `${vehicle_id} flagged by operator`);
+      if (!note || !confirm(`Create operator incident for ${vehicle_id}?`)) return false;
+      const payload = { vehicle_id, route, message: note, severity: 'medium' };
+      const response = await fetch(api + '/alerts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const result = await response.json();
+      if (result.alert) {
+        await fetch(api + '/operator-feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ alert_id: result.alert.id, vehicle_id, route, action: `created: ${note}` }),
+        });
+      }
       await refreshData();
       renderOperator();
       return true;
@@ -709,5 +847,5 @@
     }
   }
 
-  window.LoadSense = { initMobile, initOperator, createAlert };
+  window.LoadSense = { initMobile, initOperator, createAlert, zoomVehicle };
 })();
