@@ -10,6 +10,9 @@ from backend.app.core.phase2 import load_demand_forecast, predict_eta_details
 from backend.app.core.routes import list_routes
 from backend.app.db import sqlite_store
 from backend.app.core.state import fleet_store
+from backend.app.db.models import OperatorAlert as OperatorAlertModel
+from uuid import uuid4
+from datetime import datetime, timezone
 
 router = APIRouter()
 
@@ -136,6 +139,28 @@ def delete_route(route: str):
         with conn:
             conn.execute("DELETE FROM routes WHERE route = ?", (route,))
         return {"status": "deleted", "route": route}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+class CreateAlert(BaseModel):
+    vehicle_id: str
+    route: str
+    severity: str = "medium"
+    message: str
+
+
+@router.post("/alerts")
+def create_alert(payload: CreateAlert):
+    try:
+        ts = datetime.now(timezone.utc).isoformat()
+        alert = OperatorAlertModel(id=str(uuid4()), severity=payload.severity, vehicle_id=payload.vehicle_id, route=payload.route, message=payload.message, timestamp=ts, acknowledged=False)
+        sqlite_store.save_alert(alert)
+        try:
+            fleet_store._alerts.append(alert)
+        except Exception:
+            pass
+        return {"status": "ok", "alert": model_to_dict(alert)}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

@@ -175,7 +175,7 @@
         const tier = tierClass(vehicle.tier);
         const icon = L.divIcon({ className: 'vehicle-icon-wrapper', html: `<span class="vehicle-div-icon ${tier}"></span>`, iconSize: [18,18], iconAnchor: [9,9] });
         const marker = L.marker([lat, lon], { icon });
-        const popup = `<strong>${escapeHtml(vehicle.vehicle_id)}</strong><br/>Route: ${escapeHtml(vehicle.route)}<br/>Load: ${escapeHtml(String(vehicle.occupancy))}/${escapeHtml(String(vehicle.capacity))}<br/>ETA: ${escapeHtml(String(vehicle.eta_minutes))} min`;
+        const popup = `<strong>${escapeHtml(vehicle.vehicle_id)}</strong><br/>Route: ${escapeHtml(vehicle.route)}<br/>Load: ${escapeHtml(String(vehicle.occupancy))}/${escapeHtml(String(vehicle.capacity))}<br/>ETA: ${escapeHtml(String(vehicle.eta_minutes))} min<br/><button onclick="window.LoadSense.createAlert('${escapeHtml(vehicle.vehicle_id)}','${escapeHtml(vehicle.route)}')">Flag</button>`;
         marker.bindPopup(popup);
         marker.bindTooltip(`${escapeHtml(vehicle.vehicle_id)} (${escapeHtml(vehicle.route)})` , { permanent: false });
         if (clusterGroup) {
@@ -527,6 +527,7 @@
           </div>
           <div>
             <button class="button secondary edit-route" data-route="${escapeHtml(r.route)}">Edit</button>
+            <button class="button" style="background:#f0f4f8;color:#0b3550;margin-left:8px" data-route-preview="${escapeHtml(r.route)}">Preview</button>
             <button class="button" style="background:#f8d7da;color:#7a191b;margin-left:8px" data-route="${escapeHtml(r.route)}" class="delete-route">Delete</button>
           </div>
         </div>
@@ -539,6 +540,10 @@
       qs('routeId').value = r.route;
       qs('routeName').value = r.name;
       qs('routePolyline').value = (r.polyline || []).map(p => `${p.latitude},${p.longitude}`).join('\n');
+    }));
+    document.querySelectorAll('[data-route-preview]').forEach(btn => btn.addEventListener('click', e => {
+      const route = btn.dataset.routePreview;
+      drawMap('operatorMap', route);
     }));
     document.querySelectorAll('[data-route]').forEach(btn => {
       if (btn.classList.contains('delete-route') || btn.textContent.trim().toLowerCase()==='delete') {
@@ -556,6 +561,9 @@
   async function initRoutesAdmin() {
     const save = qs('saveRoute');
     const clear = qs('clearRoute');
+    const exportBtn = qs('exportRoutes');
+    const importBtn = qs('importRoutesBtn');
+    const importArea = qs('importRoutes');
     if (save) {
       save.addEventListener('click', async () => {
         const route = qs('routeId').value.trim();
@@ -579,6 +587,31 @@
         qs('routeId').value = '';
         qs('routeName').value = '';
         qs('routePolyline').value = '';
+      });
+    }
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => {
+        const data = state.routes || [];
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'routes.json'; document.body.appendChild(a); a.click(); a.remove();
+      });
+    }
+    if (importBtn && importArea) {
+      importBtn.addEventListener('click', () => {
+        importArea.style.display = importArea.style.display === 'none' ? 'block' : 'none';
+      });
+      importArea.addEventListener('change', async () => {
+        try {
+          const json = JSON.parse(importArea.value);
+          if (!Array.isArray(json)) throw new Error('Expected array');
+          for (const r of json) {
+            const poly = (r.polyline || []).map(p => Array.isArray(p) ? p : [p.latitude, p.longitude]);
+            await fetch(api + '/routes', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ route: r.route, name: r.name, polyline: poly }) });
+          }
+          await refreshData(); renderOperator();
+        } catch (e) { alert('Invalid JSON: ' + e.message); }
       });
     }
   }
@@ -627,5 +660,18 @@
     }, 5000);
   }
 
-  window.LoadSense = { initMobile, initOperator };
+  async function createAlert(vehicle_id, route, message) {
+    try {
+      const payload = { vehicle_id, route, message: message || `${vehicle_id} flagged by operator`, severity: 'medium' };
+      await fetch(api + '/alerts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      await refreshData();
+      renderOperator();
+      return true;
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+  }
+
+  window.LoadSense = { initMobile, initOperator, createAlert };
 })();

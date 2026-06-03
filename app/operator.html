@@ -80,6 +80,11 @@
               <button id="clearRoute" class="button secondary" type="button">Clear</button>
             </div>
           </form>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="exportRoutes" class="button secondary">Export routes (JSON)</button>
+            <button id="importRoutesBtn" class="button">Import routes (JSON)</button>
+          </div>
+          <textarea id="importRoutes" placeholder='Paste JSON array of routes here (route,name,polyline)' style="width:100%;height:110px;margin-top:8px;display:none"></textarea>
           <div id="routesTable" style="margin-top:12px"></div>
         </div>
       </section>
