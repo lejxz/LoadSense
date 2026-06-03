@@ -1,0 +1,3 @@
+import React from 'react';
+import { API } from '../App';
+export default function Alerts({ alerts, onRefresh }) { const ack = async id => { await fetch(`${API}/api/anomalies/${id}`, { method: 'PATCH' }); onRefresh(); }; return <><div className="topbar"><div><h1>Alerts</h1><p>Operator-first anomaly review before commuter notification.</p></div></div><section className="panel">{alerts.filter(a=>a.status==='pending_operator_review').map(a=><div className="alert-row" key={a.id}><strong>{a.vehicle_id}</strong><span>{a.anomaly_type}</span><span>{a.details}</span><span className="badge">{new Date(a.timestamp).toLocaleTimeString()}</span><button className="primary" onClick={()=>ack(a.id)}>Acknowledge</button></div>)}</section></>; }

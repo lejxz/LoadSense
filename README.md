@@ -1,86 +1,92 @@
 # LoadSense
 
-Integrated AI occupancy and transit intelligence for PUVs, based on the USJR FlowerBoys ASEAN Smart Cities roadmap.
+LoadSense is a hackathon prototype for the ASEAN AI Hackathon 2026 Smart Cities track. It simulates an intelligent jeepney/PUV platform for Cebu, Philippines: software-only edge telemetry, a FastAPI cloud layer, an operator dashboard, and a commuter mobile UI.
 
-LoadSense is implemented here as a software-only demo: edge hardware is simulated, the backend is FastAPI with SQLite persistence, model artifacts are local, and the commuter/operator UI is a lightweight browser app.
-
-## What Is Implemented
-
-- Mock GPS and occupancy telemetry for jeepney/PUV routes.
-- Occupancy tier logic: Green, Yellow, Red, and Blinking Red.
-- Stateful FastAPI backend with SQLite persistence, live fleet state, route deviation checks, driving anomaly alerts, ETA, demand forecast, operator alerts, and a context-based boarding assistant.
-- Software-only edge line-crossing counter that exports frame counts and LED tiers.
-- Separated commuter mobile app and operator console served from the backend.
-- Synthetic historical occupancy logs and checked-in model artifacts.
+All hardware is simulated. Passenger counting is a deterministic random walk, GPS follows Cebu route waypoints, LED strips render in the terminal and WebSocket, and AI/ML models fall back to demo logic when heavyweight packages are unavailable.
 
 ## Project Layout
 
 ```text
-app/                 Browser UI for commuter and operator demo
-backend/             FastAPI app, route intelligence, fleet state, API routes
-cloud/               ETA and demand forecast training scripts/artifacts
-data/                Synthetic history, SQLite database, and generated edge counter outputs
-docs/                Phase runbooks and implementation notes
-edge/                Mock telemetry and line-crossing edge simulation
-tests/               Lightweight health check
+edge/            Simulated Raspberry Pi passenger counter, GPS, LEDs, telemetry POSTs
+backend/         FastAPI API, SQLite seed data, ETA, demand, anomaly, chatbot routes
+dashboard/       React + Vite operator dashboard on port 5173
+commuter-app/    React + Vite mobile commuter app on port 5174
+docker-compose.yml
 ```
 
-## Run The Demo
+## Run Without Docker
 
-Start the backend:
+Use Python 3.11+ and Node 20+.
 
 ```powershell
-$env:PYTHONPATH='.'; venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload
+python -m venv venv
+venv\Scripts\pip install -r requirements.txt
+venv\Scripts\python backend\seed.py
+cd backend
+..\venv\Scripts\uvicorn main:app --reload --port 8000
 ```
 
-Open the app:
-
-```text
-http://localhost:8000
-```
-
-Direct demo pages:
-
-```text
-http://localhost:8000/mobile.html
-http://localhost:8000/operator.html
-```
-
-Click `Seed Demo Data` in the operator console, use the `+` button in the commuter app, or send live mock telemetry:
+In two more terminals:
 
 ```powershell
-venv\Scripts\python.exe edge\mock_telemetry.py --mode http --url http://localhost:8000/api/telemetry --interval 1
+cd dashboard
+npm install
+npm run dev
 ```
-
-Generate edge line-crossing demo evidence:
 
 ```powershell
-venv\Scripts\python.exe edge\line_crossing_counter.py --frames 240
+cd commuter-app
+npm install
+npm run dev
 ```
 
-The line-crossing counter should stay separate for the hackathon demo. It represents the vehicle-side camera and edge inference program, while the web app shows the downstream commuter and operator experiences that consume occupancy telemetry.
+Start the simulated edge devices:
+
+```powershell
+venv\Scripts\python edge\simulator.py --vehicles 3
+```
+
+Open the apps:
+
+- Operator dashboard: http://localhost:5173
+- Commuter app: http://localhost:5174
+- Backend docs: http://localhost:8000/docs
+
+## Run With Docker
+
+```powershell
+docker compose up --build
+```
+
+Then run the edge simulator from the host:
+
+```powershell
+python edge\simulator.py --vehicles 3 --backend-url http://127.0.0.1:8000
+```
+
+## Local Chatbot
+
+The commuter chatbot is fully local for the prototype. It uses the nearest live jeepney, occupancy tier, passenger count, ETA estimate, and selected stop to return a deterministic 2-sentence boarding recommendation. No Claude, Anthropic, OpenAI, or other paid API key is required.
+
+## Demo Walkthrough Script
+
+1. Start the backend, dashboard, commuter app, and edge simulator with `python edge\simulator.py --vehicles 3`.
+2. Show the simulator terminal: LED states update every two seconds in green, yellow, red, or blinking red.
+3. Open http://localhost:5173 and show three jeepneys moving on the Cebu Fleet Map.
+4. Trigger a route anomaly with `python edge\simulator.py --vehicles 3 --force-deviation`; `JY-001` moves off-route.
+5. Open Alerts, show the `ROUTE_DEVIATION` alert, click Acknowledge, and narrate that commuters are now notified.
+6. Open Demand, select Ayala-SM-Carbon, and show the six-window rush-hour forecast.
+7. Open http://localhost:5174, select a stop, and compare incoming jeepneys by ETA and occupancy.
+8. In Chat, ask "Should I board the next jeepney?" and show the recommendation using live occupancy context.
+9. Open Map and show nearby jeepney dots around the selected Cebu stop.
 
 ## API Highlights
 
-- `POST /api/telemetry` accepts mock GPS and occupancy payloads.
-- `GET /api/fleet` returns the live fleet state and summary metrics.
-- `GET /api/alerts` returns operator-first anomaly alerts.
-- `GET /api/incidents` returns persisted historical safety incidents.
-- `GET /api/database/status` returns SQLite table counts.
-- `GET /api/eta/{stop_id}` returns ETA from the trained model when available.
-- `GET /api/demand` returns demand forecast rows for the dashboard.
-- `POST /api/chatbot` returns a boarding recommendation using live fleet context.
-- `GET /api/routes` returns route polylines and stop metadata.
-
-## Verification
-
-```powershell
-venv\Scripts\python.exe tests\run_health_check.py
-venv\Scripts\python.exe tests\run_api_smoke.py
-```
-
-The API smoke check uses FastAPI `TestClient` across telemetry, fleet, alerts, demand, and chatbot endpoints.
-
-## Documentation
-
-Start with [docs/REQUIREMENTS_COVERAGE.md](docs/REQUIREMENTS_COVERAGE.md), then follow [RUN_DEMO.md](RUN_DEMO.md) for the demo script.
+- `POST /api/telemetry`
+- `GET /api/fleet`
+- `GET /api/eta/{vehicle_id}/{stop_id}`
+- `GET /api/demand/{route_id}`
+- `GET /api/anomalies`
+- `PATCH /api/anomalies/{id}`
+- `POST /api/chat`
+- `GET /api/ws` as a WebSocket endpoint

@@ -1,0 +1,4 @@
+import React from 'react';
+import ETACard from '../components/ETACard';
+const syntheticEta=(vehicle,index)=>Math.max(1,Math.round((index+1)*3+(16-vehicle.speed_kph)/8));
+export default function StopView({stops,selectedStop,setSelectedStop,fleet}){const incoming=[...fleet].sort((a,b)=>syntheticEta(a,0)-syntheticEta(b,0));return <main className="screen"><h1>Incoming rides</h1><p>Choose your stop and compare the next jeepneys.</p><select value={selectedStop} onChange={e=>setSelectedStop(e.target.value)}>{stops.map(stop=><option key={stop.id} value={stop.id}>{stop.name}</option>)}</select><div className="eta-list">{incoming.map((vehicle,index)=><ETACard key={vehicle.vehicle_id} vehicle={vehicle} eta={syntheticEta(vehicle,index)}/>)}{!incoming.length&&<p>Start the edge simulator to see live incoming jeepneys.</p>}</div></main>}
