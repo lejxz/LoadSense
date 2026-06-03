@@ -170,10 +170,21 @@
       if (pointsAll.length) {
         try {
           const bounds = L.latLngBounds(pointsAll);
-          map.fitBounds(bounds.pad ? bounds.pad(0.2) : bounds, { maxZoom: 16 });
+          // ensure map has correct size before fitting bounds (handles hidden -> visible)
+          setTimeout(() => {
+            try {
+              map.invalidateSize();
+              map.fitBounds(bounds.pad ? bounds.pad(0.2) : bounds, { maxZoom: 16 });
+            } catch (e) {
+              // ignore
+            }
+          }, 150);
         } catch (e) {
           // ignore
         }
+      } else {
+        // nothing to show - ensure map resizes correctly when visible
+        setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 150);
       }
       return;
     }
@@ -302,7 +313,27 @@
       qs("loginScreen").classList.add("hidden");
       qs("appScreen").classList.remove("hidden");
       await refreshData();
-      renderMobile();
+      // attempt to detect user location and auto-select nearest route, then render
+      try {
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(async pos => {
+            const lat = pos.coords.latitude;
+            const lon = pos.coords.longitude;
+            const nearest = findNearestRoute(lat, lon);
+            if (nearest) {
+              state.selectedRoute = nearest;
+            }
+            await refreshData();
+            renderMobile();
+          }, async () => { await refreshData(); renderMobile(); }, { timeout: 3000 });
+        } else {
+          await refreshData();
+          renderMobile();
+        }
+      } catch (e) {
+        await refreshData();
+        renderMobile();
+      }
     });
     qs("mapRoute").addEventListener("change", event => {
       state.selectedRoute = event.target.value;
@@ -393,6 +424,29 @@
     renderDatabaseStatus();
     renderIncidentLog();
     renderRoutesAdmin();
+  }
+
+  function findNearestRoute(lat, lon) {
+    if (!state.routes || !state.routes.length) return null;
+    function sqr(x){return x*x}
+    function approxDist(aLat,aLon,bLat,bLon){
+      // simple equirectangular approximation
+      const R = 6371000;
+      const x = (bLon - aLon) * Math.cos((aLat + bLat)/2 * Math.PI/180);
+      const y = (bLat - aLat);
+      return Math.sqrt(x*x + y*y) * (Math.PI/180) * R;
+    }
+    let best = null;
+    let bestD = Infinity;
+    for (const r of state.routes) {
+      const points = (r.polyline || []).map(p => [Number(p.latitude), Number(p.longitude)]);
+      for (const [plat, plon] of points) {
+        const d = approxDist(lat, lon, plat, plon);
+        if (d < bestD) { bestD = d; best = r.route; }
+      }
+    }
+    // threshold 1000m to auto-select
+    return bestD < 1000 ? best : null;
   }
 
   function renderRoutesAdmin() {
