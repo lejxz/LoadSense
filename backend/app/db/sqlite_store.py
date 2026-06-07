@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from backend.app.core.compat import model_to_dict
 from backend.app.core.config import config_value, repo_path
+from backend.app.core.transit import SYNTHETIC_REGIONAL_ROUTES, infer_city, route_metadata
 from backend.app.db.models import OperatorAlert, VehicleState
 
 
@@ -41,7 +42,9 @@ def init_db() -> None:
                 route_deviation_json TEXT NOT NULL,
                 signal_quality TEXT NOT NULL,
                 speed_kph REAL,
-                heading REAL
+                heading REAL,
+                direction TEXT,
+                status TEXT NOT NULL DEFAULT 'active'
             );
 
             CREATE TABLE IF NOT EXISTS vehicle_states (
@@ -60,7 +63,9 @@ def init_db() -> None:
                 route_deviation_json TEXT NOT NULL,
                 signal_quality TEXT NOT NULL,
                 speed_kph REAL,
-                heading REAL
+                heading REAL,
+                direction TEXT,
+                status TEXT NOT NULL DEFAULT 'active'
             );
 
             CREATE TABLE IF NOT EXISTS operator_alerts (
@@ -97,7 +102,18 @@ def init_db() -> None:
             );
             """
         )
+        _ensure_vehicle_columns(conn)
         _seed_cebu_routes_if_needed(conn)
+        _seed_regional_routes_if_needed(conn)
+
+
+def _ensure_vehicle_columns(conn: sqlite3.Connection) -> None:
+    for table in ["telemetry_logs", "vehicle_states"]:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if "direction" not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN direction TEXT")
+        if "status" not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
 
 
 def _seed_cebu_routes_if_needed(conn: sqlite3.Connection) -> None:
@@ -116,6 +132,21 @@ def _seed_cebu_routes_if_needed(conn: sqlite3.Connection) -> None:
         conn.execute(
             "INSERT OR REPLACE INTO routes (route, name, polyline_json) VALUES (?, ?, ?)",
             (route["route"], route["name"], json.dumps(route["polyline"])),
+        )
+
+
+def _seed_regional_routes_if_needed(conn: sqlite3.Connection) -> None:
+    existing = {
+        row["route"]
+        for row in conn.execute("SELECT route FROM routes").fetchall()
+    }
+    for route in SYNTHETIC_REGIONAL_ROUTES:
+        if route["route"] in existing:
+            continue
+        polyline = [(stop["latitude"], stop["longitude"]) for stop in route["stops"]]
+        conn.execute(
+            "INSERT OR IGNORE INTO routes (route, name, polyline_json) VALUES (?, ?, ?)",
+            (route["route"], route["name"], json.dumps(polyline)),
         )
 
 
@@ -179,6 +210,8 @@ def save_vehicle_state(state: VehicleState, received_at: str) -> None:
         "signal_quality": state.signal_quality,
         "speed_kph": state.speed_kph,
         "heading": state.heading,
+        "direction": state.direction,
+        "status": state.status,
     }
     with _connect() as conn:
         conn.execute(
@@ -186,11 +219,11 @@ def save_vehicle_state(state: VehicleState, received_at: str) -> None:
             INSERT INTO telemetry_logs (
                 vehicle_id, route, latitude, longitude, occupancy, capacity, tier,
                 source_timestamp, received_at, eta_minutes, eta_source, next_stop_id,
-                route_deviation_json, signal_quality, speed_kph, heading
+                route_deviation_json, signal_quality, speed_kph, heading, direction, status
             ) VALUES (
                 :vehicle_id, :route, :latitude, :longitude, :occupancy, :capacity, :tier,
                 :source_timestamp, :received_at, :eta_minutes, :eta_source, :next_stop_id,
-                :route_deviation_json, :signal_quality, :speed_kph, :heading
+                :route_deviation_json, :signal_quality, :speed_kph, :heading, :direction, :status
             )
             """,
             params,
@@ -200,11 +233,11 @@ def save_vehicle_state(state: VehicleState, received_at: str) -> None:
             INSERT INTO vehicle_states (
                 vehicle_id, route, latitude, longitude, occupancy, capacity, tier,
                 source_timestamp, received_at, eta_minutes, eta_source, next_stop_id,
-                route_deviation_json, signal_quality, speed_kph, heading
+                route_deviation_json, signal_quality, speed_kph, heading, direction, status
             ) VALUES (
                 :vehicle_id, :route, :latitude, :longitude, :occupancy, :capacity, :tier,
                 :source_timestamp, :received_at, :eta_minutes, :eta_source, :next_stop_id,
-                :route_deviation_json, :signal_quality, :speed_kph, :heading
+                :route_deviation_json, :signal_quality, :speed_kph, :heading, :direction, :status
             )
             ON CONFLICT(vehicle_id) DO UPDATE SET
                 route=excluded.route,
@@ -221,7 +254,9 @@ def save_vehicle_state(state: VehicleState, received_at: str) -> None:
                 route_deviation_json=excluded.route_deviation_json,
                 signal_quality=excluded.signal_quality,
                 speed_kph=excluded.speed_kph,
-                heading=excluded.heading
+                heading=excluded.heading,
+                direction=excluded.direction,
+                status=excluded.status
             """,
             params,
         )
@@ -381,12 +416,23 @@ def load_routes() -> list[dict[str, Any]]:
             poly = json.loads(row["polyline_json"]) if row["polyline_json"] else []
         except Exception:
             poly = []
-        stops = _display_stops(poly, row["name"])
+        metadata = route_metadata(row["route"])
+        stops = metadata.get("stops") or _display_stops(poly, row["name"])
+        city = metadata.get("city") or infer_city(
+            [{"latitude": float(lat), "longitude": float(lon)} for lat, lon in poly],
+            row["name"],
+        )
+        endpoints = metadata.get("endpoints") or ([stops[0]["name"], stops[-1]["name"]] if len(stops) >= 2 else [])
         result.append({
             "route": row["route"],
             "name": row["name"],
             "polyline": [{"latitude": float(lat), "longitude": float(lon)} for lat, lon in poly],
             "stops": stops,
+            "city": city,
+            "zone": metadata.get("zone") or city,
+            "type": metadata.get("type") or "PUV",
+            "landmarks": metadata.get("landmarks") or [stop["name"] for stop in stops[:6]],
+            "endpoints": endpoints,
         })
     return result
 
@@ -429,6 +475,8 @@ def _vehicle_from_row(row: sqlite3.Row) -> VehicleState:
         signal_quality=row["signal_quality"],
         speed_kph=row["speed_kph"],
         heading=row["heading"],
+        direction=row["direction"],
+        status=row["status"] or "active",
     )
 
 
