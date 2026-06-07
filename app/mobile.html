@@ -39,6 +39,23 @@
           </div>
         </header>
 
+        <section id="tripSearchPanel" class="trip-search-panel" aria-label="Find a PUV">
+          <div class="trip-fields">
+            <label>
+              Current Location
+              <input id="originInput" list="originSuggestions" autocomplete="off" value="Current Location" />
+            </label>
+            <button id="swapTrip" class="mini-action swap-trip" type="button" title="Swap origin and destination">Swap</button>
+            <label>
+              Destination
+              <input id="destinationInput" list="destinationSuggestions" autocomplete="off" placeholder="Search stop or landmark" />
+            </label>
+          </div>
+          <button id="findPuvBtn" class="button primary" type="button">Find PUV</button>
+          <datalist id="originSuggestions"></datalist>
+          <datalist id="destinationSuggestions"></datalist>
+        </section>
+
         <section class="tab-panel active" id="homeTab">
           <div class="hero-card">
             <p class="eyebrow">Best boarding option</p>
@@ -93,14 +110,20 @@
         </section>
 
         <section class="tab-panel" id="routesTab">
-          <div class="section-head">
-            <div>
-              <p class="eyebrow">Route directory</p>
-              <h2>Selected route</h2>
+          <div class="route-directory-sheet">
+            <div class="sheet-handle" aria-hidden="true"></div>
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Route directory</p>
+                <h2>Near me</h2>
+              </div>
             </div>
+            <div class="route-directory-controls">
+              <input id="routeSearch" class="route-search" placeholder="Search route, city, landmark" />
+              <select id="cityFilter"></select>
+            </div>
+            <div id="routeList" class="route-list"></div>
           </div>
-          <input id="routeSearch" class="route-search" placeholder="Search route code or corridor" />
-          <div id="routeList" class="route-list"></div>
         </section>
 
         <section class="tab-panel" id="chatTab">

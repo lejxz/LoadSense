@@ -16,6 +16,13 @@
     selectedDestination: null,
     selectedVehicleId: null,
     routeQuery: "",
+    cityFilter: "all",
+    places: [],
+    tripSuggestions: [],
+    tripMatches: [],
+    tripMessage: "",
+    originInput: "Current Location",
+    destinationInput: "",
   };
 
   const tierCopy = {
@@ -52,6 +59,63 @@
     return tierCopy[tier] || "No signal";
   }
 
+  function showToast(message) {
+    let toast = qs("loadsenseToast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.id = "loadsenseToast";
+      toast.className = "loadsense-toast";
+      document.body.appendChild(toast);
+    }
+    toast.textContent = String(message || "");
+    toast.classList.add("show");
+    clearTimeout(showToast._timer);
+    showToast._timer = setTimeout(() => toast.classList.remove("show"), 2600);
+  }
+
+  function cityName(route) {
+    return route.city || route.zone || "Philippines";
+  }
+
+  function routeStopPoints(route) {
+    const points = (route?.stops && route.stops.length ? route.stops : route?.polyline || []);
+    return points.filter(isMapCoordinate);
+  }
+
+  function routeDistanceMeters(route, origin) {
+    if (!origin || !isMapCoordinate(origin)) return Number.POSITIVE_INFINITY;
+    const points = routeStopPoints(route);
+    if (!points.length) return Number.POSITIVE_INFINITY;
+    return points.reduce((best, point) => {
+      const distance = haversineMeters(Number(origin.latitude), Number(origin.longitude), Number(point.latitude), Number(point.longitude));
+      return Math.min(best, distance);
+    }, Number.POSITIVE_INFINITY);
+  }
+
+  function sortedRoutesForDisplay(routes) {
+    const origin = state.lastPosition;
+    return [...routes].sort((left, right) => {
+      const leftDistance = routeDistanceMeters(left, origin);
+      const rightDistance = routeDistanceMeters(right, origin);
+      if (leftDistance !== rightDistance) return leftDistance - rightDistance;
+      return `${cityName(left)} ${left.route}`.localeCompare(`${cityName(right)} ${right.route}`);
+    });
+  }
+
+  function routeSummary(route) {
+    const points = routeStopPoints(route);
+    const vehicles = state.vehicles.filter(vehicle => vehicle.route === route.route);
+    const distance = routeDistanceMeters(route, state.lastPosition);
+    return {
+      stopCount: points.length,
+      vehicleCount: vehicles.length,
+      distanceKm: Number.isFinite(distance) ? (distance / 1000).toFixed(1) : null,
+      endpoints: route.endpoints || (points.length >= 2 ? [points[0].name, points[points.length - 1].name] : []),
+      landmarks: (route.landmarks || []).slice(0, 4),
+      vehicles,
+    };
+  }
+
   function vehicleSort(a, b) {
     const rank = { green: 0, yellow: 1, red: 2, blinking_red: 3 };
     return (rank[a.tier] ?? 9) - (rank[b.tier] ?? 9) || a.eta_minutes - b.eta_minutes;
@@ -60,7 +124,19 @@
   function isMapCoordinate(value) {
     const lat = Number(value?.latitude);
     const lon = Number(value?.longitude);
-    return Number.isFinite(lat) && Number.isFinite(lon) && lat >= 10.15 && lat <= 10.55 && lon >= 123.65 && lon <= 124.1;
+    return Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 && !(lat === 0 && lon === 0);
+  }
+
+  function toRad(value) {
+    return value * Math.PI / 180;
+  }
+
+  function haversineMeters(aLat, aLon, bLat, bLon) {
+    const radius = 6371000;
+    const dLat = toRad(bLat - aLat);
+    const dLon = toRad(bLon - aLon);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLon / 2) ** 2;
+    return radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
   function routePoint(route, ratio) {
@@ -88,6 +164,7 @@
     state.demand = demand || {};
     state.database = database || {};
     state.incidents = incidents.incidents || [];
+    state.places = buildPlaceOptions();
     return state;
   }
 
@@ -100,6 +177,57 @@
       const attr = route.route === selected ? " selected" : "";
       return `<option value="${escapeHtml(route.route)}"${attr}>${escapeHtml(route.route)} ${escapeHtml(route.name)}</option>`;
     }).join("");
+  }
+
+  function buildPlaceOptions() {
+    const places = [];
+    for (const route of state.routes) {
+      const city = route.city || "Philippines";
+      for (const stop of route.stops || []) {
+        if (isMapCoordinate(stop)) {
+          places.push({
+            name: stop.name,
+            city,
+            route: route.route,
+            latitude: Number(stop.latitude),
+            longitude: Number(stop.longitude),
+          });
+        }
+      }
+      const endpoints = route.endpoints || [];
+      const firstPoint = (route.polyline || []).find(isMapCoordinate);
+      const lastPoint = [...(route.polyline || [])].reverse().find(isMapCoordinate);
+      if (endpoints[0] && firstPoint) {
+        places.push({ name: endpoints[0], city, route: route.route, latitude: Number(firstPoint.latitude), longitude: Number(firstPoint.longitude) });
+      }
+      if (endpoints[1] && lastPoint) {
+        places.push({ name: endpoints[1], city, route: route.route, latitude: Number(lastPoint.latitude), longitude: Number(lastPoint.longitude) });
+      }
+    }
+    const seen = new Set();
+    return places.filter(place => {
+      const key = `${place.name.toLowerCase()}-${place.latitude.toFixed(4)}-${place.longitude.toFixed(4)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => `${a.city} ${a.name}`.localeCompare(`${b.city} ${b.name}`));
+  }
+
+  function updatePlaceDatalists() {
+    const options = state.places.slice(0, 160).map(place => (
+      `<option value="${escapeHtml(place.name)}">${escapeHtml(place.city || "")}${place.route ? ` - ${escapeHtml(place.route)}` : ""}</option>`
+    )).join("");
+    const origin = qs("originSuggestions");
+    const destination = qs("destinationSuggestions");
+    if (origin) origin.innerHTML = `<option value="Current Location"></option>${options}`;
+    if (destination) destination.innerHTML = options;
+    const cityFilter = qs("cityFilter");
+    if (cityFilter) {
+      const cities = ["all", ...new Set(state.routes.map(route => cityName(route)))];
+      cityFilter.innerHTML = cities.map(city => `<option value="${escapeHtml(city)}">${escapeHtml(city === "all" ? "All cities" : city)}</option>`).join("");
+      if (!cities.includes(state.cityFilter)) state.cityFilter = "all";
+      cityFilter.value = state.cityFilter;
+    }
   }
 
   function routeBounds(routes) {
@@ -282,7 +410,7 @@
         <div>
           <h4>${escapeHtml(vehicle.vehicle_id)} <span>Route ${escapeHtml(vehicle.route)}</span></h4>
           <p>${escapeHtml(routeName(vehicle.route))}</p>
-          <p>ETA ${vehicle.eta_minutes} min to Stop ${Number(vehicle.next_stop_id) + 1} - ${vehicle.occupancy}/${vehicle.capacity} riders</p>
+          <p>ETA ${vehicle.eta_minutes} min to Stop ${Number(vehicle.next_stop_id) + 1} - ${vehicle.occupancy}/${vehicle.capacity} riders - ${escapeHtml(vehicle.status || "active")}</p>
         </div>
         <div class="vehicle-card-actions">
           <span class="occupancy-pill ${tierClass(vehicle.tier)}">${tierLabel(vehicle.tier)}</span>
@@ -290,6 +418,114 @@
         </div>
       </article>
     `;
+  }
+
+  function renderSuggestionCard(suggestion) {
+    return `
+      <article class="vehicle-card suggestion-card">
+        <div>
+          <h4>${escapeHtml(suggestion.vehicle_id)} <span>Route ${escapeHtml(suggestion.route)}</span></h4>
+          <p>${escapeHtml(suggestion.route_name || routeName(suggestion.route))}</p>
+          <p>Board: ${escapeHtml(suggestion.boarding_stop?.name || "nearest stop")} - Alight: ${escapeHtml(suggestion.alighting_stop?.name || "destination")}</p>
+          <p>${Number(suggestion.distance_km || 0).toFixed(1)} km away - arriving in ~${Math.round(Number(suggestion.eta_minutes || 0))} min - PHP ${escapeHtml(suggestion.fare_pesos || "--")}</p>
+        </div>
+        <div class="vehicle-card-actions">
+          <span class="occupancy-pill ${tierClass(suggestion.tier)}">${tierLabel(suggestion.tier)}</span>
+          <button class="mini-action" data-zoom-vehicle="${escapeHtml(suggestion.vehicle_id)}">Zoom</button>
+          <button class="mini-action" data-select-route="${escapeHtml(suggestion.route)}">Route</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function placeFromInput(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (!normalized || normalized === "current location" || normalized === "my location") return null;
+    return state.places.find(place => place.name.toLowerCase() === normalized)
+      || state.places.find(place => place.name.toLowerCase().includes(normalized));
+  }
+
+  function buildTripPayload(query = "") {
+    const originInput = qs("originInput");
+    const destinationInput = qs("destinationInput");
+    state.originInput = originInput?.value.trim() || "Current Location";
+    state.destinationInput = destinationInput?.value.trim() || "";
+    const originPlace = placeFromInput(state.originInput);
+    const destinationPlace = placeFromInput(state.destinationInput);
+    const payload = {
+      route: "",
+      query,
+      origin: state.originInput,
+      destination: state.destinationInput,
+      limit: 6,
+    };
+    if (originPlace) {
+      payload.origin_latitude = originPlace.latitude;
+      payload.origin_longitude = originPlace.longitude;
+    } else if (state.lastPosition && /current location|my location|here/i.test(state.originInput)) {
+      payload.origin_latitude = state.lastPosition.latitude;
+      payload.origin_longitude = state.lastPosition.longitude;
+    }
+    if (destinationPlace) {
+      payload.destination_latitude = destinationPlace.latitude;
+      payload.destination_longitude = destinationPlace.longitude;
+    }
+    return payload;
+  }
+
+  function syncTripResult(result) {
+    state.tripSuggestions = result?.suggestions || result?.context || [];
+    state.tripMatches = result?.matches || [];
+    state.tripMessage = result?.answer || "";
+    if (result?.destination && isMapCoordinate(result.destination)) {
+      state.selectedDestination = {
+        latitude: Number(result.destination.latitude),
+        longitude: Number(result.destination.longitude),
+        name: result.destination.name,
+      };
+    }
+    const nextRoute = state.tripSuggestions[0]?.route || state.tripMatches[0]?.route;
+    if (nextRoute) {
+      state.selectedRoute = nextRoute;
+    }
+  }
+
+  async function requestTripSuggestions(query = "") {
+    const destination = qs("destinationInput")?.value.trim();
+    if (!destination && !query) {
+      showToast("Enter a destination first.");
+      return null;
+    }
+    const result = await getJson("/suggestions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildTripPayload(query)),
+    });
+    syncTripResult(result);
+    renderMobile();
+    const map = state.maps.mobileMap;
+    const best = state.tripSuggestions[0];
+    if (map && state.selectedDestination && typeof L !== "undefined") {
+      const points = [[state.selectedDestination.latitude, state.selectedDestination.longitude]];
+      if (best && isMapCoordinate({ latitude: best.boarding_stop?.latitude, longitude: best.boarding_stop?.longitude })) {
+        points.push([best.boarding_stop.latitude, best.boarding_stop.longitude]);
+      }
+      try { map.fitBounds(L.latLngBounds(points), { maxZoom: 15, padding: [30, 30] }); } catch (e) {}
+    }
+    return result;
+  }
+
+  function bindVehicleButtons(scope = document) {
+    scope.querySelectorAll("[data-zoom-vehicle]").forEach(button => {
+      button.addEventListener("click", () => zoomVehicle(button.dataset.zoomVehicle));
+    });
+    scope.querySelectorAll("[data-select-route]").forEach(button => {
+      button.addEventListener("click", () => {
+        state.selectedRoute = button.dataset.selectRoute;
+        state.tripSuggestions = [];
+        renderMobile();
+      });
+    });
   }
 
   function initMobileTabs() {
@@ -316,30 +552,42 @@
       homeRoute.innerHTML = selectOptions(selected);
       homeRoute.value = selected;
     }
+    updatePlaceDatalists();
 
     const routeVehicles = state.vehicles.filter(vehicle => vehicle.route === selected).sort(vehicleSort);
     const best = routeVehicles[0] || [...state.vehicles].sort(vehicleSort)[0];
-    qs("mobileFleet").innerHTML = routeVehicles.length
+    const activeSuggestions = state.tripSuggestions.length ? state.tripSuggestions : null;
+    qs("mobileFleet").innerHTML = activeSuggestions
+      ? activeSuggestions.map(renderSuggestionCard).join("")
+      : routeVehicles.length
       ? routeVehicles.map(renderVehicleCard).join("")
       : `<p class="empty-copy">No live PUVs for Route ${escapeHtml(selected)} yet. The backend simulator will publish the next loop shortly.</p>`;
-    document.querySelectorAll("[data-zoom-vehicle]").forEach(button => {
-      button.addEventListener("click", () => zoomVehicle(button.dataset.zoomVehicle));
-    });
+    bindVehicleButtons();
 
-    if (best) {
-      const safeText = best.route_deviation?.anomaly ? "Verify" : "Clear";
-      qs("bestVehicleTitle").textContent = `${best.vehicle_id} - ${tierLabel(best.tier)}`;
-      qs("bestVehicleBody").textContent = `ETA ${best.eta_minutes} min near Stop ${Number(best.next_stop_id) + 1}. ${best.route_deviation?.anomaly ? "Operator verification is needed before passenger alerting." : "Route is currently within the expected corridor."}`;
-      qs("ledPill").className = `occupancy-pill ${tierClass(best.tier)}`;
-      qs("ledPill").textContent = `Windshield LED: ${tierLabel(best.tier)}`;
-      qs("homeEta").textContent = `${best.eta_minutes}m`;
-      qs("homeLoad").textContent = `${best.occupancy}/${best.capacity}`;
-      qs("homeSafety").textContent = safeText;
+    const bestSuggestion = state.tripSuggestions[0];
+    if (bestSuggestion) {
+      qs("bestVehicleTitle").textContent = `${bestSuggestion.vehicle_id} - Route ${bestSuggestion.route}`;
+      qs("bestVehicleBody").textContent = `${state.tripMessage || bestSuggestion.route_name}. Arriving in ~${Math.round(Number(bestSuggestion.eta_minutes || 0))} min from ${Number(bestSuggestion.distance_km || 0).toFixed(1)} km away. Board near ${bestSuggestion.boarding_stop?.name || "nearest stop"}.`;
+      qs("ledPill").className = `occupancy-pill ${tierClass(bestSuggestion.tier)}`;
+      qs("ledPill").textContent = `Windshield LED: ${tierLabel(bestSuggestion.tier)}`;
+      qs("homeEta").textContent = `${Math.round(Number(bestSuggestion.eta_minutes || 0))}m`;
+      qs("homeLoad").textContent = `${bestSuggestion.occupancy}/${bestSuggestion.capacity}`;
+      qs("homeSafety").textContent = bestSuggestion.status || "active";
+    } else if (best) {
+        const safeText = best.route_deviation?.anomaly ? "Verify" : "Clear";
+        qs("bestVehicleTitle").textContent = `${best.vehicle_id} - ${tierLabel(best.tier)}`;
+        qs("bestVehicleBody").textContent = `ETA ${best.eta_minutes} min near Stop ${Number(best.next_stop_id) + 1}. ${best.route_deviation?.anomaly ? "Operator verification is needed before passenger alerting." : "Route is currently within the expected corridor."}`;
+        qs("ledPill").className = `occupancy-pill ${tierClass(best.tier)}`;
+        qs("ledPill").textContent = `Windshield LED: ${tierLabel(best.tier)}`;
+        qs("homeEta").textContent = `${best.eta_minutes}m`;
+        qs("homeLoad").textContent = `${best.occupancy}/${best.capacity}`;
+        qs("homeSafety").textContent = safeText;
     }
 
     renderRouteDirectory();
     renderDestinationConfirm();
     drawMap("mobileMap", selected);
+    setTimeout(() => fitRoute("mobileMap", selected), 100);
   }
 
   function renderDestinationConfirm() {
@@ -352,23 +600,16 @@
     }
     const lat = state.selectedDestination.latitude.toFixed(5);
     const lon = state.selectedDestination.longitude.toFixed(5);
-    const candidates = state.vehicles.filter(v => v.route === state.selectedRoute).sort(vehicleSort);
-    const best = candidates[0];
+    const best = state.tripSuggestions[0] || state.vehicles.filter(v => v.route === state.selectedRoute).sort(vehicleSort)[0];
     panel.classList.remove("hidden");
     panel.innerHTML = `
       <strong>Destination selected</strong>
       <code>${lat}, ${lon}</code>
-      <p>${best ? `Suggested PUV ${escapeHtml(best.vehicle_id)} on Route ${escapeHtml(best.route)} - ETA ${escapeHtml(String(best.eta_minutes))} min.` : "No live PUVs are reporting on this route yet."}</p>
-      <button id="suggestDestinationPuv" class="button primary" type="button">Suggest PUV</button>
+      <p>${state.tripMessage || (best ? `Suggested PUV ${escapeHtml(best.vehicle_id)} on Route ${escapeHtml(best.route)} - ETA ${escapeHtml(String(best.eta_minutes || 0))} min.` : "Enter a destination and tap Find PUV to search the full route set.")}</p>
+      <button id="suggestDestinationPuv" class="button primary" type="button">Find PUV</button>
     `;
     qs("suggestDestinationPuv").addEventListener("click", async () => {
-      await refreshData();
-      renderMobile();
-      const map = state.maps.mobileMap;
-      const updated = state.vehicles.filter(v => v.route === state.selectedRoute).sort(vehicleSort)[0];
-      if (map && updated) {
-        L.popup().setLatLng([state.selectedDestination.latitude, state.selectedDestination.longitude]).setContent(`<b>Suggested PUV</b><br/>${escapeHtml(updated.vehicle_id)} - ETA ${updated.eta_minutes}m`).openOn(map);
-      }
+      await requestTripSuggestions(state.destinationInput || state.selectedDestination?.name || "");
     });
   }
 
@@ -378,10 +619,12 @@
     const result = await getJson("/chatbot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ route: state.selectedRoute, query }),
+      body: JSON.stringify(buildTripPayload(query)),
     });
+    syncTripResult(result);
     transcript.insertAdjacentHTML("beforeend", `<div class="message bot">${escapeHtml(result.answer)}</div>`);
     transcript.scrollTop = transcript.scrollHeight;
+    renderMobile();
   }
 
   async function initMobile() {
@@ -418,6 +661,32 @@
       state.selectedRoute = event.target.value;
       renderMobile();
     });
+    const cityFilter = qs("cityFilter");
+    if (cityFilter) {
+      cityFilter.addEventListener("change", event => {
+        state.cityFilter = event.target.value || "all";
+        renderRouteDirectory();
+      });
+    }
+    const findPuvBtn = qs("findPuvBtn");
+    if (findPuvBtn) {
+      findPuvBtn.addEventListener("click", async () => {
+        await requestTripSuggestions();
+      });
+    }
+    const swapTrip = qs("swapTrip");
+    if (swapTrip) {
+      swapTrip.addEventListener("click", () => {
+        const originInput = qs("originInput");
+        const destinationInput = qs("destinationInput");
+        const originValue = originInput?.value || "";
+        if (originInput && destinationInput) {
+          originInput.value = destinationInput.value || "Current Location";
+          destinationInput.value = originValue === "Current Location" ? "" : originValue;
+          showToast("Trip fields swapped.");
+        }
+      });
+    }
     // Home route selector (moved from login)
     const homeRouteSelect = qs("homeRouteSelect");
     if (homeRouteSelect) {
@@ -527,39 +796,91 @@
 
   function renderRouteDirectory() {
     const query = state.routeQuery.toLowerCase();
-    const matched = query
-      ? state.routes.filter(route => `${route.route} ${route.name}`.toLowerCase().includes(query))
-      : state.routes.filter(route => route.route === state.selectedRoute);
-    const routes = matched.slice(0, 1);
-    qs("routeList").innerHTML = routes.length
-      ? routes.map(route => {
-          const vehicles = state.vehicles.filter(vehicle => vehicle.route === route.route).sort(vehicleSort);
-          const sampleStops = (route.stops || []).slice(0, 7);
-          return `
-            <article class="route-card clean-route-card">
-              <div>
-                <h3>${escapeHtml(route.route)} ${escapeHtml(route.name)}</h3>
-                <p>${(route.polyline || []).length} map points from Cebu OSM data - ${vehicles.length} live simulated PUVs</p>
-              </div>
-              <div class="route-facts">
-                <span>Best ETA <strong>${vehicles[0] ? `${vehicles[0].eta_minutes}m` : "--"}</strong></span>
-                <span>Lowest load <strong>${vehicles[0] ? `${vehicles[0].occupancy}/${vehicles[0].capacity}` : "--"}</strong></span>
-              </div>
-              <ol>
-                ${sampleStops.map(stop => `<li>${escapeHtml(stop.name)}</li>`).join("")}
-              </ol>
-            </article>
-          `;
-        }).join("")
-      : `<p class="empty-copy">No route matched that search.</p>`;
-    const first = routes[0];
-    if (first && first.route !== state.selectedRoute) {
-      state.selectedRoute = first.route;
+    const cityFilter = state.cityFilter || "all";
+    const matched = state.routes
+      .filter(route => cityFilter === "all" || cityName(route) === cityFilter)
+      .filter(route => {
+        const haystack = `${route.route} ${route.name} ${route.city || ""} ${route.zone || ""} ${(route.landmarks || []).join(" ")}`.toLowerCase();
+        return !query || haystack.includes(query);
+      })
+      .map(route => ({
+        ...route,
+        summary: routeSummary(route),
+      }))
+      .sort((left, right) => {
+        const leftDistance = routeDistanceMeters(left, state.lastPosition);
+        const rightDistance = routeDistanceMeters(right, state.lastPosition);
+        if (leftDistance !== rightDistance) return leftDistance - rightDistance;
+        return `${cityName(left)} ${left.route}`.localeCompare(`${cityName(right)} ${right.route}`);
+      });
+    const container = qs("routeList");
+    if (!container) return;
+    if (!matched.length) {
+      container.innerHTML = `<p class="empty-copy">No route matched that search.</p>`;
+      return;
+    }
+    const grouped = matched.reduce((accumulator, route) => {
+      const city = cityName(route);
+      if (!accumulator[city]) accumulator[city] = [];
+      accumulator[city].push(route);
+      return accumulator;
+    }, {});
+    container.innerHTML = Object.entries(grouped).map(([groupName, groupRoutes]) => `
+      <section class="route-group">
+        <div class="route-group-head">
+          <h3>${escapeHtml(groupName)}</h3>
+          <span>${groupRoutes.length} route${groupRoutes.length === 1 ? "" : "s"}</span>
+        </div>
+        <div class="route-group-list">
+          ${groupRoutes.map(route => {
+            const summary = route.summary;
+            const selected = route.route === state.selectedRoute ? " selected" : "";
+            return `
+              <article class="route-card clean-route-card${selected}">
+                <div class="route-card-head">
+                  <div>
+                    <h3>${escapeHtml(route.route)} ${escapeHtml(route.name)}</h3>
+                    <p>${escapeHtml(route.zone || cityName(route))} - ${summary.stopCount} stops - ${summary.vehicleCount} live PUVs</p>
+                  </div>
+                  <span class="route-distance">${summary.distanceKm ? `~${summary.distanceKm} km away` : "Near me"}</span>
+                </div>
+                <div class="route-facts compact">
+                  <span>Active PUVs<strong>${summary.vehicleCount}</strong></span>
+                  <span>Coverage<strong>${summary.stopCount} stops</strong></span>
+                </div>
+                <p class="route-landmarks">${escapeHtml((summary.endpoints || []).join(" • "))}</p>
+                <p class="route-landmarks muted">${escapeHtml((summary.landmarks || []).join(" • "))}</p>
+                <div class="route-actions">
+                  <button class="mini-action" data-select-route="${escapeHtml(route.route)}" type="button">Use route</button>
+                  <button class="mini-action" data-preview-route="${escapeHtml(route.route)}" type="button">Preview</button>
+                </div>
+              </article>
+            `;
+          }).join("")}
+        </div>
+      </section>
+    `).join("");
+    container.querySelectorAll("[data-preview-route]").forEach(button => {
+      button.addEventListener("click", () => {
+        drawMap("mobileMap", button.dataset.previewRoute);
+        setTimeout(() => fitRoute("mobileMap", button.dataset.previewRoute), 100);
+      });
+    });
+    container.querySelectorAll("[data-select-route]").forEach(button => {
+      button.addEventListener("click", () => {
+        state.selectedRoute = button.dataset.selectRoute;
+        state.tripSuggestions = [];
+        renderMobile();
+      });
+    });
+    if (matched[0] && matched[0].route !== state.selectedRoute) {
+      const first = matched[0].route;
+      state.selectedRoute = first;
       const mapRoute = qs("mapRoute");
       const homeRoute = qs("homeRouteSelect");
-      if (mapRoute) mapRoute.value = first.route;
-      if (homeRoute) homeRoute.value = first.route;
-      drawMap("mobileMap", first.route);
+      if (mapRoute) mapRoute.value = first;
+      if (homeRoute) homeRoute.value = first;
+      drawMap("mobileMap", first);
     }
   }
 

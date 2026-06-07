@@ -149,6 +149,19 @@ class FleetStore:
                 "language": suggestion_result["language"],
             }
 
+        if not route:
+            answer = suggestion_result["answer"]
+            sqlite_store.save_chat_query("all", query, answer, datetime.now(UTC).isoformat())
+            return {
+                "route": "",
+                "answer": answer,
+                "context": [],
+                "origin": suggestion_result["origin"],
+                "destination": suggestion_result["destination"],
+                "matches": [],
+                "language": suggestion_result["language"],
+            }
+
         route_vehicles = [vehicle for vehicle in self.fleet() if vehicle.route == route]
         if not route_vehicles:
             return {
