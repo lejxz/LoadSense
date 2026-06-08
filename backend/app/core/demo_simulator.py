@@ -12,7 +12,7 @@ from backend.app.db import sqlite_store
 
 
 class SyntheticFleetSimulator:
-    def __init__(self, fleet_store: Any, vehicles_per_route: int = 3, interval_seconds: float = 2.0) -> None:
+    def __init__(self, fleet_store: Any, vehicles_per_route: int = 6, interval_seconds: float = 3.0) -> None:
         self.fleet_store = fleet_store
         self.vehicles_per_route = vehicles_per_route
         self.interval_seconds = interval_seconds
@@ -36,9 +36,13 @@ class SyntheticFleetSimulator:
             for route_index, route in enumerate(routes):
                 points = route["polyline"]
                 for vehicle_index in range(self.vehicles_per_route):
-                    position = ((tick * (0.006 + vehicle_index * 0.0015)) + vehicle_index / self.vehicles_per_route + route_index * 0.017) % 1.0
+                    direction = "forward" if (route_index + vehicle_index) % 2 == 0 else "backward"
+                    speed_kph = 20 + ((tick + vehicle_index * 7 + route_index * 3) % 21)
+                    progress = ((tick * (0.0045 + vehicle_index * 0.0008)) + vehicle_index / self.vehicles_per_route + route_index * 0.017) % 1.0
+                    position = progress if direction == "forward" else 1.0 - progress
                     lat, lon = _point_at(points, position)
                     occupancy = _occupancy_for(tick, route_index, vehicle_index)
+                    status = _status_for(tick, occupancy, route_index, vehicle_index)
                     payload = SimpleNamespace(
                         vehicle_id=f"{route['route']}-{vehicle_index + 1:02d}",
                         route=route["route"],
@@ -46,8 +50,10 @@ class SyntheticFleetSimulator:
                         longitude=lon,
                         occupancy=occupancy,
                         timestamp=datetime.now(UTC).isoformat(),
-                        speed_kph=18 + ((tick + vehicle_index * 7 + route_index) % 19),
-                        heading=None,
+                        speed_kph=0 if status == "idle" else speed_kph,
+                        heading=_heading_at(points, position, direction),
+                        direction=direction,
+                        status=status,
                         signal_quality="ok",
                     )
                     self.fleet_store.upsert_telemetry(payload)
@@ -75,3 +81,29 @@ def _occupancy_for(tick: int, route_index: int, vehicle_index: int) -> int:
     if (tick + route_index + vehicle_index) % 37 == 0:
         return 18
     return max(1, min(16, base + vehicle_index * 2))
+
+
+def _status_for(tick: int, occupancy: int, route_index: int, vehicle_index: int) -> str:
+    if (tick + route_index * 2 + vehicle_index) % 41 == 0:
+        return "idle"
+    if occupancy >= 16:
+        return "full"
+    return "active"
+
+
+def _heading_at(points: list[dict[str, float]], ratio: float, direction: str) -> float | None:
+    if len(points) < 2:
+        return None
+    scaled = ratio * (len(points) - 1)
+    left = int(math.floor(scaled))
+    right = min(len(points) - 1, left + 1)
+    if direction == "backward":
+        left, right = right, left
+    a = points[left]
+    b = points[right]
+    lat1 = math.radians(float(a["latitude"]))
+    lat2 = math.radians(float(b["latitude"]))
+    d_lon = math.radians(float(b["longitude"]) - float(a["longitude"]))
+    y = math.sin(d_lon) * math.cos(lat2)
+    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(d_lon)
+    return round((math.degrees(math.atan2(y, x)) + 360) % 360, 1)

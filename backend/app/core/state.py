@@ -9,7 +9,8 @@ from backend.app.core.config import config_value
 from backend.app.core.occupancy import DEFAULT_CAPACITY, get_occupancy_tier
 from backend.app.core.phase2 import predict_eta_details
 from backend.app.core.route_deviation import detect_route_deviation
-from backend.app.core.routes import nearest_stop_id
+from backend.app.core.routes import list_routes, nearest_stop_id
+from backend.app.core.transit import find_transit_suggestions
 from backend.app.db import sqlite_store
 from backend.app.db.models import OperatorAlert, VehicleState
 
@@ -64,6 +65,8 @@ class FleetStore:
             signal_quality=signal_quality,
             speed_kph=getattr(payload, "speed_kph", None),
             heading=getattr(payload, "heading", None),
+            direction=getattr(payload, "direction", None),
+            status=getattr(payload, "status", "active"),
         )
         self._vehicles[state.vehicle_id] = state
         received_at = datetime.now(UTC).isoformat()
@@ -86,7 +89,79 @@ class FleetStore:
                 return alert
         return None
 
-    def recommendation(self, route: str, query: str = "") -> Dict[str, Any]:
+    def route_suggestions(
+        self,
+        query: str = "",
+        route: str = "",
+        origin_text: str = "",
+        origin_latitude: Optional[float] = None,
+        origin_longitude: Optional[float] = None,
+        destination: str = "",
+        destination_latitude: Optional[float] = None,
+        destination_longitude: Optional[float] = None,
+        limit: int = 5,
+    ) -> Dict[str, Any]:
+        return find_transit_suggestions(
+            routes=list_routes(),
+            vehicles=[model_to_dict(vehicle) for vehicle in self.fleet()],
+            query=query,
+            selected_route=route,
+            origin_text=origin_text,
+            origin_latitude=origin_latitude,
+            origin_longitude=origin_longitude,
+            destination_text=destination,
+            destination_latitude=destination_latitude,
+            destination_longitude=destination_longitude,
+            limit=limit,
+        )
+
+    def recommendation(
+        self,
+        route: str,
+        query: str = "",
+        origin_text: str = "",
+        origin_latitude: Optional[float] = None,
+        origin_longitude: Optional[float] = None,
+        destination: str = "",
+        destination_latitude: Optional[float] = None,
+        destination_longitude: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        suggestion_result = self.route_suggestions(
+            query=query,
+            route=route,
+            origin_text=origin_text,
+            origin_latitude=origin_latitude,
+            origin_longitude=origin_longitude,
+            destination=destination,
+            destination_latitude=destination_latitude,
+            destination_longitude=destination_longitude,
+        )
+        if suggestion_result["destination"] or suggestion_result["suggestions"]:
+            answer = suggestion_result["answer"]
+            sqlite_store.save_chat_query(route, query, answer, datetime.now(UTC).isoformat())
+            return {
+                "route": route,
+                "answer": answer,
+                "context": suggestion_result["suggestions"],
+                "origin": suggestion_result["origin"],
+                "destination": suggestion_result["destination"],
+                "matches": suggestion_result["matches"],
+                "language": suggestion_result["language"],
+            }
+
+        if not route:
+            answer = suggestion_result["answer"]
+            sqlite_store.save_chat_query("all", query, answer, datetime.now(UTC).isoformat())
+            return {
+                "route": "",
+                "answer": answer,
+                "context": [],
+                "origin": suggestion_result["origin"],
+                "destination": suggestion_result["destination"],
+                "matches": [],
+                "language": suggestion_result["language"],
+            }
+
         route_vehicles = [vehicle for vehicle in self.fleet() if vehicle.route == route]
         if not route_vehicles:
             return {

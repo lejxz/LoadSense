@@ -19,6 +19,8 @@ class VehicleState(BaseModel):
     signal_quality: str = "ok"
     speed_kph: Optional[float] = None
     heading: Optional[float] = None
+    direction: Optional[str] = None
+    status: str = "active"
 
 
 class OperatorAlert(BaseModel):

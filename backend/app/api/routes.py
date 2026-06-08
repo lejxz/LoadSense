@@ -12,6 +12,7 @@ from backend.app.core.config import default_route, get_config
 from backend.app.core.compat import model_to_dict, validate_model
 from backend.app.core.phase2 import load_demand_forecast, predict_eta_details
 from backend.app.core.routes import list_routes
+from backend.app.core.transit import search_places
 from backend.app.db import sqlite_store
 from backend.app.core.state import fleet_store
 from backend.app.db.models import OperatorAlert as OperatorAlertModel
@@ -31,11 +32,31 @@ class Telemetry(BaseModel):
     speed_kph: Optional[float] = None
     heading: Optional[float] = None
     signal_quality: Optional[str] = None
+    direction: Optional[str] = None
+    status: str = "active"
 
 
 class ChatQuery(BaseModel):
     route: str = default_route()
     query: str
+    origin: Optional[str] = None
+    origin_latitude: Optional[float] = None
+    origin_longitude: Optional[float] = None
+    destination: Optional[str] = None
+    destination_latitude: Optional[float] = None
+    destination_longitude: Optional[float] = None
+
+
+class SuggestionQuery(BaseModel):
+    route: str = default_route()
+    query: str = ""
+    origin: Optional[str] = None
+    origin_latitude: Optional[float] = None
+    origin_longitude: Optional[float] = None
+    destination: Optional[str] = None
+    destination_latitude: Optional[float] = None
+    destination_longitude: Optional[float] = None
+    limit: int = 5
 
 
 @router.post("/telemetry")
@@ -116,6 +137,26 @@ def get_routes(route: Optional[str] = None, q: Optional[str] = None):
             if query in item["route"].lower() or query in item["name"].lower()
         ]
     return {"routes": routes}
+
+
+@router.get("/places")
+def get_places(q: Optional[str] = None, limit: int = 12):
+    return {"places": search_places(list_routes(), q or "", limit=limit)}
+
+
+@router.post("/suggestions")
+def get_suggestions(query: SuggestionQuery):
+    return fleet_store.route_suggestions(
+        query=query.query,
+        route=query.route,
+        origin_text=query.origin or "",
+        origin_latitude=query.origin_latitude,
+        origin_longitude=query.origin_longitude,
+        destination=query.destination or "",
+        destination_latitude=query.destination_latitude,
+        destination_longitude=query.destination_longitude,
+        limit=query.limit,
+    )
 
 
 class RoutePayload(BaseModel):
@@ -257,7 +298,16 @@ def get_project_config():
 
 @router.post("/chatbot")
 def chatbot(query: ChatQuery):
-    return fleet_store.recommendation(route=query.route, query=query.query)
+    return fleet_store.recommendation(
+        route=query.route,
+        query=query.query,
+        origin_text=query.origin or "",
+        origin_latitude=query.origin_latitude,
+        origin_longitude=query.origin_longitude,
+        destination=query.destination or "",
+        destination_latitude=query.destination_latitude,
+        destination_longitude=query.destination_longitude,
+    )
 
 
 def validate_polyline(polyline: list[list[float]]) -> None:
