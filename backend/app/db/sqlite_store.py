@@ -75,7 +75,10 @@ def init_db() -> None:
                 route TEXT NOT NULL,
                 message TEXT NOT NULL,
                 timestamp TEXT NOT NULL,
-                acknowledged INTEGER NOT NULL DEFAULT 0
+                acknowledged INTEGER NOT NULL DEFAULT 0,
+                verification_status TEXT NOT NULL DEFAULT 'open',
+                resolution_note TEXT,
+                verified_at TEXT
             );
 
             CREATE TABLE IF NOT EXISTS operator_feedback (
@@ -103,6 +106,7 @@ def init_db() -> None:
             """
         )
         _ensure_vehicle_columns(conn)
+        _ensure_alert_columns(conn)
         _seed_cebu_routes_if_needed(conn)
         _seed_regional_routes_if_needed(conn)
 
@@ -114,6 +118,16 @@ def _ensure_vehicle_columns(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN direction TEXT")
         if "status" not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+
+
+def _ensure_alert_columns(conn: sqlite3.Connection) -> None:
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(operator_alerts)").fetchall()}
+    if "verification_status" not in existing:
+        conn.execute("ALTER TABLE operator_alerts ADD COLUMN verification_status TEXT NOT NULL DEFAULT 'open'")
+    if "resolution_note" not in existing:
+        conn.execute("ALTER TABLE operator_alerts ADD COLUMN resolution_note TEXT")
+    if "verified_at" not in existing:
+        conn.execute("ALTER TABLE operator_alerts ADD COLUMN verified_at TEXT")
 
 
 def _seed_cebu_routes_if_needed(conn: sqlite3.Connection) -> None:
@@ -268,8 +282,9 @@ def save_alert(alert: OperatorAlert) -> None:
         conn.execute(
             """
             INSERT OR IGNORE INTO operator_alerts (
-                id, severity, vehicle_id, route, message, timestamp, acknowledged
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                id, severity, vehicle_id, route, message, timestamp, acknowledged,
+                verification_status, resolution_note, verified_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 alert.id,
@@ -279,25 +294,42 @@ def save_alert(alert: OperatorAlert) -> None:
                 alert.message,
                 alert.timestamp,
                 int(alert.acknowledged),
+                alert.verification_status,
+                alert.resolution_note,
+                alert.verified_at,
             ),
         )
 
 
 def acknowledge_alert(alert_id: str, timestamp: str) -> Optional[OperatorAlert]:
+    return verify_alert(alert_id, "verified", "", timestamp)
+
+
+def verify_alert(alert_id: str, action: str, note: str, timestamp: str) -> Optional[OperatorAlert]:
     init_db()
+    normalized_action = action if action in {"verified", "false_alarm", "escalated"} else "verified"
+    acknowledged = 0 if normalized_action == "escalated" else 1
     with _connect() as conn:
         row = conn.execute("SELECT * FROM operator_alerts WHERE id = ?", (alert_id,)).fetchone()
         if row is None:
             return None
-        conn.execute("UPDATE operator_alerts SET acknowledged = 1 WHERE id = ?", (alert_id,))
+        conn.execute(
+            """
+            UPDATE operator_alerts
+            SET acknowledged = ?, verification_status = ?, resolution_note = ?, verified_at = ?
+            WHERE id = ?
+            """,
+            (acknowledged, normalized_action, note, timestamp, alert_id),
+        )
         conn.execute(
             """
             INSERT INTO operator_feedback (alert_id, vehicle_id, route, action, timestamp)
             VALUES (?, ?, ?, ?, ?)
             """,
-            (alert_id, row["vehicle_id"], row["route"], "verified", timestamp),
+            (alert_id, row["vehicle_id"], row["route"], f"{normalized_action}: {note}".strip(": "), timestamp),
         )
-    return _alert_from_row(row, acknowledged=True)
+        updated = conn.execute("SELECT * FROM operator_alerts WHERE id = ?", (alert_id,)).fetchone()
+    return _alert_from_row(updated, acknowledged=bool(acknowledged))
 
 
 def save_chat_query(route: str, query: str, answer: str, timestamp: str) -> None:
@@ -340,7 +372,8 @@ def list_incidents(limit: int = 50) -> list[dict[str, Any]]:
     with _connect() as conn:
         rows = conn.execute(
             """
-            SELECT id, severity, vehicle_id, route, message, timestamp, acknowledged
+            SELECT id, severity, vehicle_id, route, message, timestamp, acknowledged,
+                   verification_status, resolution_note, verified_at
             FROM operator_alerts
             ORDER BY timestamp DESC
             LIMIT ?
@@ -358,10 +391,60 @@ def database_status() -> dict[str, Any]:
             table: conn.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"]
             for table in tables
         }
+        load_rows = conn.execute(
+            """
+            SELECT route,
+                   COUNT(*) AS samples,
+                   ROUND(AVG(occupancy), 2) AS average_occupancy,
+                   SUM(CASE WHEN tier = 'blinking_red' THEN 1 ELSE 0 END) AS overloaded_samples
+            FROM telemetry_logs
+            GROUP BY route
+            ORDER BY samples DESC, route
+            LIMIT 8
+            """
+        ).fetchall()
+        vehicle_rows = conn.execute(
+            """
+            SELECT route,
+                   COUNT(*) AS vehicles,
+                   ROUND(AVG(occupancy), 2) AS average_occupancy,
+                   SUM(CASE WHEN tier IN ('red', 'blinking_red') THEN 1 ELSE 0 END) AS crowded
+            FROM vehicle_states
+            GROUP BY route
+            ORDER BY vehicles DESC, route
+            LIMIT 8
+            """
+        ).fetchall()
+        alert_rows = conn.execute(
+            """
+            SELECT verification_status, COUNT(*) AS count
+            FROM operator_alerts
+            GROUP BY verification_status
+            ORDER BY count DESC
+            """
+        ).fetchall()
+        recent_chat_rows = conn.execute(
+            """
+            SELECT route, query, answer, timestamp
+            FROM chatbot_queries
+            ORDER BY timestamp DESC
+            LIMIT 5
+            """
+        ).fetchall()
     return {
         "path": str(DB_PATH),
         "exists": DB_PATH.exists(),
         "tables": counts,
+        "stats": {
+            "telemetry_samples": counts.get("telemetry_logs", 0),
+            "active_vehicle_routes": len(vehicle_rows),
+            "chat_queries": counts.get("chatbot_queries", 0),
+            "open_alerts": sum(row["count"] for row in alert_rows if row["verification_status"] == "open"),
+        },
+        "route_loads": [dict(row) for row in load_rows],
+        "vehicle_routes": [dict(row) for row in vehicle_rows],
+        "alert_statuses": [dict(row) for row in alert_rows],
+        "recent_chats": [dict(row) for row in recent_chat_rows],
     }
 
 
@@ -489,4 +572,7 @@ def _alert_from_row(row: sqlite3.Row, acknowledged: Optional[bool] = None) -> Op
         message=row["message"],
         timestamp=row["timestamp"],
         acknowledged=bool(row["acknowledged"]) if acknowledged is None else acknowledged,
+        verification_status=row["verification_status"] or "open",
+        resolution_note=row["resolution_note"],
+        verified_at=row["verified_at"],
     )

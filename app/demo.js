@@ -23,6 +23,11 @@
     tripMessage: "",
     originInput: "Current Location",
     destinationInput: "",
+    operatorFleetQuery: "",
+    operatorRouteFilter: "all",
+    operatorTierFilter: "all",
+    placeSearchTimers: {},
+    chatContext: { route: "", vehicleId: "" },
   };
 
   const tierCopy = {
@@ -146,13 +151,14 @@
   }
 
   async function refreshData() {
-    const [fleet, routes, alerts, demand, database, incidents] = await Promise.all([
+    const [fleet, routes, alerts, demand, database, incidents, places] = await Promise.all([
       getJson("/fleet"),
       getJson("/routes"),
       getJson("/alerts"),
       getJson("/demand"),
       getJson("/database/status"),
       getJson("/incidents"),
+      getJson("/places?limit=300"),
     ]);
     state.vehicles = fleet.vehicles || [];
     state.summary = fleet.summary || {};
@@ -164,7 +170,7 @@
     state.demand = demand || {};
     state.database = database || {};
     state.incidents = incidents.incidents || [];
-    state.places = buildPlaceOptions();
+    state.places = (places.places && places.places.length ? places.places : buildPlaceOptions());
     return state;
   }
 
@@ -214,13 +220,6 @@
   }
 
   function updatePlaceDatalists() {
-    const options = state.places.slice(0, 160).map(place => (
-      `<option value="${escapeHtml(place.name)}">${escapeHtml(place.city || "")}${place.route ? ` - ${escapeHtml(place.route)}` : ""}</option>`
-    )).join("");
-    const origin = qs("originSuggestions");
-    const destination = qs("destinationSuggestions");
-    if (origin) origin.innerHTML = `<option value="Current Location"></option>${options}`;
-    if (destination) destination.innerHTML = options;
     const cityFilter = qs("cityFilter");
     if (cityFilter) {
       const cities = ["all", ...new Set(state.routes.map(route => cityName(route)))];
@@ -268,6 +267,7 @@
         }).addTo(map);
         state.maps[containerId] = map;
         state.mapLayers[containerId] = L.layerGroup().addTo(map);
+        addMapActionControl(containerId, map);
         // clustering layer
         try {
           state.mapClusters[containerId] = L.markerClusterGroup({
@@ -296,7 +296,13 @@
         const latlngs = (route.polyline || []).filter(p => Number(p.latitude) && Number(p.longitude)).map(p => [Number(p.latitude), Number(p.longitude)]);
         if (latlngs.length) {
             const selectedRoute = route.route === state.selectedRoute;
-            const polyline = L.polyline(latlngs, { color: selectedRoute ? '#1a73e8' : '#9aa0a6', weight: selectedRoute ? 6 : 3, opacity: selectedRoute ? 0.95 : 0.35 }).addTo(layerGroup);
+            if (selectedRoute) {
+              L.polyline(latlngs, { color: '#ffffff', weight: 12, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(layerGroup);
+              L.polyline(latlngs, { color: '#0b57d0', weight: 8, opacity: 0.98, lineCap: 'round', lineJoin: 'round' }).addTo(layerGroup);
+              L.polyline(latlngs, { color: '#58a6ff', weight: 3, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(layerGroup);
+            } else {
+              L.polyline(latlngs, { color: '#9aa0a6', weight: 2, opacity: routeFilter ? 0.25 : 0.16, lineCap: 'round', lineJoin: 'round' }).addTo(layerGroup);
+            }
             // start and end markers
             const start = latlngs[0];
             const end = latlngs[latlngs.length-1];
@@ -304,13 +310,6 @@
             const endMarker = L.circleMarker(end, { radius: 6, color: '#fff', weight: 1, fillColor: '#2f5f98', fillOpacity: 1 }).bindTooltip('End');
             startMarker.addTo(layerGroup);
             endMarker.addTo(layerGroup);
-            // if map is mobile map, allow clicking polyline to set as destination
-            if (containerId === 'mobileMap') {
-              polyline.on('click', () => {
-                state.selectedRoute = (route.route || route.name);
-                renderMobile();
-              });
-            }
         }
       }
       // draw vehicle markers
@@ -332,28 +331,6 @@
       }
       drawDestinationLayer(containerId, layerGroup);
       setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 150);
-      // map click on mobile map: set destination and suggest best PUV
-      if (containerId === 'mobileMap') {
-        map.off('click', map._ls_click_handler || (() => {}));
-        map._ls_click_handler = function (e) {
-          const lat = e.latlng.lat, lon = e.latlng.lng;
-          state.selectedDestination = { latitude: lat, longitude: lon };
-          const nearest = findNearestRoute(lat, lon);
-          if (nearest) state.selectedRoute = nearest;
-          // find best vehicle for selected route
-          refreshData().then(() => {
-            renderMobile();
-            const candidates = state.vehicles.filter(v => v.route === state.selectedRoute).sort(vehicleSort);
-            if (candidates.length) {
-              const best = candidates[0];
-              L.popup().setLatLng([lat, lon]).setContent(`<b>Suggested PUV</b><br/>${escapeHtml(best.vehicle_id)} - ETA ${best.eta_minutes}m`).openOn(map);
-            } else {
-              L.popup().setLatLng([lat, lon]).setContent('<b>No live PUVs for this route</b>').openOn(map);
-            }
-          });
-        };
-        map.on('click', map._ls_click_handler);
-      }
       return;
     }
     // Fallback: original SVG renderer
@@ -390,6 +367,31 @@
         ${vehicles}
       </svg>
     `;
+  }
+
+  function addMapActionControl(containerId, map) {
+    if (typeof L === "undefined") return;
+    const control = L.control({ position: "topright" });
+    control.onAdd = function () {
+      const wrap = L.DomUtil.create("div", "map-action-control");
+      const button = L.DomUtil.create("button", "", wrap);
+      button.type = "button";
+      button.title = containerId === "operatorMap" ? "Center map on fleet" : "Center map on my location";
+      button.setAttribute("aria-label", button.title);
+      button.textContent = containerId === "operatorMap" ? "Fit" : "Me";
+      L.DomEvent.disableClickPropagation(wrap);
+      L.DomEvent.on(button, "click", () => {
+        if (containerId === "operatorMap") {
+          fitFleet(containerId);
+        } else if (state.lastPosition) {
+          map.setView([state.lastPosition.latitude, state.lastPosition.longitude], 15);
+        } else {
+          fitRoute(containerId, state.selectedRoute);
+        }
+      });
+      return wrap;
+    };
+    control.addTo(map);
   }
 
   function drawDestinationLayer(containerId, layerGroup) {
@@ -441,22 +443,163 @@
   function placeFromInput(value) {
     const normalized = String(value || "").trim().toLowerCase();
     if (!normalized || normalized === "current location" || normalized === "my location") return null;
-    return state.places.find(place => place.name.toLowerCase() === normalized)
-      || state.places.find(place => place.name.toLowerCase().includes(normalized));
+    return rankedPlaces(normalized, 1)[0] || null;
   }
 
-  function buildTripPayload(query = "") {
+  function normalizeSearch(value) {
+    return String(value || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+  }
+
+  function placeSearchText(place) {
+    return normalizeSearch(`${place.name || ""} ${place.city || ""} ${place.route || ""} ${(place.aliases || []).join(" ")}`);
+  }
+
+  function rankedPlaces(query, limit = 8) {
+    const needle = normalizeSearch(query);
+    if (!needle) return [];
+    const tokens = needle.split(" ");
+    const routeLike = /^(route\s+)?[a-z0-9]{1,4}$/.test(needle);
+    return state.places
+      .map(place => {
+        const haystack = placeSearchText(place);
+        let score = 0;
+        if (haystack === needle) score = 220;
+        else if (haystack.includes(needle)) score = 140;
+        else if (tokens.every(token => haystack.includes(token))) score = 95;
+        else if (haystack.replaceAll(" ", "").includes(needle.replaceAll(" ", ""))) score = 75;
+        score += placeKindBoost(place.kind, routeLike);
+        return { place, score };
+      })
+      .filter(item => item.score > 0)
+      .sort((left, right) => right.score - left.score || `${left.place.city} ${left.place.name}`.localeCompare(`${right.place.city} ${right.place.name}`))
+      .slice(0, limit)
+      .map(item => item.place);
+  }
+
+  function mergePlaces(places) {
+    if (!Array.isArray(places) || !places.length) return;
+    const existing = new Set(state.places.map(place => placeKey(place)));
+    for (const place of places) {
+      const key = placeKey(place);
+      if (existing.has(key)) continue;
+      existing.add(key);
+      state.places.push(place);
+    }
+  }
+
+  function placeKey(place) {
+    return `${normalizeSearch(place?.name)}-${Number(place?.latitude || 0).toFixed(4)}-${Number(place?.longitude || 0).toFixed(4)}`;
+  }
+
+  function placeKindBoost(kind, routeLike) {
+    const boosts = {
+      city: 70,
+      town: 68,
+      barangay: 66,
+      terminal: 58,
+      landmark: 54,
+      place: 48,
+      stop: 14,
+      route: routeLike ? 38 : -45,
+    };
+    return boosts[kind] ?? 0;
+  }
+
+  function renderPlaceResults(inputId, panelId) {
+    const input = qs(inputId);
+    const panel = qs(panelId);
+    if (!input || !panel) return;
+    const value = input.value.trim();
+    const matches = value ? rankedPlaces(value, 7) : [];
+    if (!matches.length) {
+      panel.classList.add("hidden");
+      panel.innerHTML = "";
+      return;
+    }
+    panel.classList.remove("hidden");
+    panel.innerHTML = matches.map(place => `
+      <button type="button" data-place-name="${escapeHtml(place.name)}">
+        <strong>${escapeHtml(place.name)}</strong>
+        <span>${escapeHtml(place.city || "Philippines")}${place.route ? ` - Route ${escapeHtml(place.route)}` : ""}</span>
+      </button>
+    `).join("");
+    panel.querySelectorAll("[data-place-name]").forEach(button => {
+      button.addEventListener("click", () => {
+        input.value = button.dataset.placeName;
+        panel.classList.add("hidden");
+        panel.innerHTML = "";
+        if (inputId === "destinationInput") {
+          const place = placeFromInput(input.value);
+          if (place && isMapCoordinate(place)) {
+            state.selectedDestination = {
+              name: place.name,
+              latitude: Number(place.latitude),
+              longitude: Number(place.longitude),
+            };
+            renderDestinationConfirm();
+          }
+        }
+      });
+    });
+  }
+
+  function bindPlaceSearch(inputId, panelId) {
+    const input = qs(inputId);
+    if (!input) return;
+    input.addEventListener("input", () => {
+      renderPlaceResults(inputId, panelId);
+      clearTimeout(state.placeSearchTimers[inputId]);
+      state.placeSearchTimers[inputId] = setTimeout(async () => {
+        const query = input.value.trim();
+        if (query.length < 2) return;
+        try {
+          const result = await getJson(`/places?q=${encodeURIComponent(query)}&limit=12&remote=true`);
+          mergePlaces(result.places || []);
+          renderPlaceResults(inputId, panelId);
+        } catch (error) {
+          renderPlaceResults(inputId, panelId);
+        }
+      }, 280);
+    });
+    input.addEventListener("focus", () => renderPlaceResults(inputId, panelId));
+    input.addEventListener("blur", () => {
+      setTimeout(() => qs(panelId)?.classList.add("hidden"), 140);
+    });
+  }
+
+  function queryNeedsRouteSearch(query, destination) {
+    const text = `${query || ""} ${destination || ""}`.toLowerCase();
+    return Boolean(destination) || /(get to|go to|reach|route to|going to|towards?|papunta|paingon|padung|pakadto|mapan|llegar|hacia)/i.test(text);
+  }
+
+  function queryUsesChatRouteContext(query) {
+    const text = String(query || "").toLowerCase();
+    return /(that route|this route|current route|selected route|in that route|in this route|explain this route|what is this route|which do i ride|which should i ride|which jeepney do i ride)/.test(text);
+  }
+
+  function queryLooksLikeFreshTrip(query) {
+    const text = String(query || "").toLowerCase();
+    return /(get to|go to|reach|route to|going to|need to go|destination|from|currently located|current location|papunta|paingon|padung|pakadto)/.test(text);
+  }
+
+  function buildTripPayload(query = "", options = {}) {
     const originInput = qs("originInput");
     const destinationInput = qs("destinationInput");
     state.originInput = originInput?.value.trim() || "Current Location";
     state.destinationInput = destinationInput?.value.trim() || "";
-    const originPlace = placeFromInput(state.originInput);
-    const destinationPlace = placeFromInput(state.destinationInput);
+    const chatMode = options.chat === true;
+    const useRouteContext = chatMode && queryUsesChatRouteContext(query);
+    const freshTrip = chatMode && queryLooksLikeFreshTrip(query);
+    const payloadOrigin = chatMode && freshTrip ? "" : state.originInput;
+    const payloadDestination = chatMode ? "" : state.destinationInput;
+    const originPlace = placeFromInput(payloadOrigin);
+    const destinationPlace = placeFromInput(payloadDestination);
+    const dynamicRouteSearch = queryNeedsRouteSearch(query, payloadDestination);
     const payload = {
-      route: "",
+      route: useRouteContext ? (state.chatContext.route || state.selectedRoute) : (dynamicRouteSearch || chatMode ? "" : state.selectedRoute),
       query,
-      origin: state.originInput,
-      destination: state.destinationInput,
+      origin: payloadOrigin,
+      destination: payloadDestination,
       limit: 6,
     };
     if (originPlace) {
@@ -488,6 +631,60 @@
     if (nextRoute) {
       state.selectedRoute = nextRoute;
     }
+    if (nextRoute || state.tripSuggestions[0]?.vehicle_id) {
+      state.chatContext.route = nextRoute || state.chatContext.route;
+      state.chatContext.vehicleId = state.tripSuggestions[0]?.vehicle_id || state.chatContext.vehicleId;
+    }
+  }
+
+  function syncChatResult(result) {
+    const tripLike = Boolean(result?.destination || (result?.matches || []).length || (result?.context || [])[0]?.boarding_stop);
+    if (tripLike) {
+      syncTripResult(result);
+      return;
+    }
+    const firstVehicle = (result?.context || []).find(item => item.vehicle_id && item.route);
+    if (firstVehicle) {
+      state.chatContext.route = firstVehicle.route;
+      state.chatContext.vehicleId = firstVehicle.vehicle_id;
+    } else if (result?.route && result.route !== "all") {
+      state.chatContext.route = result.route;
+    }
+  }
+
+  function renderBotMessage(result) {
+    const firstVehicle = (result?.context || []).find(item => item.vehicle_id && item.route);
+    const routeId = firstVehicle?.route || (result?.route && result.route !== "all" ? result.route : state.chatContext.route);
+    const actions = [];
+    const canZoom = ["boarding", "trip_recommendation"].includes(result?.intent);
+    if (canZoom && firstVehicle?.vehicle_id) {
+      actions.push(`<button class="mini-action" data-chat-zoom="${escapeHtml(firstVehicle.vehicle_id)}" type="button">Zoom PUV</button>`);
+    }
+    if (routeId) {
+      actions.push(`<button class="mini-action" data-chat-route="${escapeHtml(routeId)}" type="button">Show route</button>`);
+    }
+    return `
+      <div class="message bot">
+        <p>${escapeHtml(result?.answer || "I could not answer that yet.")}</p>
+        ${actions.length ? `<div class="chat-actions">${actions.join("")}</div>` : ""}
+      </div>
+    `;
+  }
+
+  function bindChatActions(scope) {
+    scope.querySelectorAll("[data-chat-zoom]").forEach(button => {
+      button.addEventListener("click", () => {
+        activateMobileTab("mapTab");
+        zoomVehicle(button.dataset.chatZoom);
+      });
+    });
+    scope.querySelectorAll("[data-chat-route]").forEach(button => {
+      button.addEventListener("click", () => {
+        state.selectedRoute = button.dataset.chatRoute;
+        activateMobileTab("mapTab");
+        previewRoute(button.dataset.chatRoute, "mobileMap");
+      });
+    });
   }
 
   async function requestTripSuggestions(query = "") {
@@ -530,27 +727,33 @@
 
   function initMobileTabs() {
     document.querySelectorAll(".mobile-nav button").forEach(button => {
-      button.addEventListener("click", () => {
-        document.querySelectorAll(".mobile-nav button").forEach(item => item.classList.remove("active"));
-        document.querySelectorAll(".tab-panel").forEach(item => item.classList.remove("active"));
-        button.classList.add("active");
-        qs(button.dataset.tab).classList.add("active");
-      });
+      button.addEventListener("click", () => activateMobileTab(button.dataset.tab));
     });
+  }
+
+  function activateMobileTab(tabId) {
+    const target = qs(tabId);
+    if (!target) return;
+    document.querySelectorAll(".mobile-nav button").forEach(item => item.classList.toggle("active", item.dataset.tab === tabId));
+    document.querySelectorAll(".tab-panel").forEach(item => item.classList.toggle("active", item.id === tabId));
+    const tripSearch = qs("tripSearchPanel");
+    if (tripSearch) {
+      tripSearch.classList.toggle("hidden", tabId !== "homeTab");
+    }
+    setTimeout(() => {
+      try { state.maps.mobileMap?.invalidateSize(); } catch (e) {}
+    }, 100);
   }
 
   function renderMobile() {
     const selected = state.selectedRoute;
-    qs("mobileRouteTitle").textContent = `Route ${selected}`;
+    qs("mobileRouteTitle").textContent = state.tripSuggestions[0]
+      ? `Best: Route ${state.tripSuggestions[0].route}`
+      : `Nearest: Route ${selected}`;
     const mapRoute = qs("mapRoute");
     if (mapRoute) {
       mapRoute.innerHTML = selectOptions(selected);
       mapRoute.value = selected;
-    }
-    const homeRoute = qs("homeRouteSelect");
-    if (homeRoute) {
-      homeRoute.innerHTML = selectOptions(selected);
-      homeRoute.value = selected;
     }
     updatePlaceDatalists();
 
@@ -619,16 +822,19 @@
     const result = await getJson("/chatbot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildTripPayload(query)),
+      body: JSON.stringify(buildTripPayload(query, { chat: true })),
     });
-    syncTripResult(result);
-    transcript.insertAdjacentHTML("beforeend", `<div class="message bot">${escapeHtml(result.answer)}</div>`);
+    syncChatResult(result);
+    transcript.insertAdjacentHTML("beforeend", renderBotMessage(result));
+    bindChatActions(transcript);
     transcript.scrollTop = transcript.scrollHeight;
     renderMobile();
   }
 
   async function initMobile() {
     initMobileTabs();
+    bindPlaceSearch("originInput", "originSearchResults");
+    bindPlaceSearch("destinationInput", "destinationSearchResults");
     qs("loginForm").addEventListener("submit", async event => {
       event.preventDefault();
       // Login only collects mobile number; route selection moved to Home tab
@@ -687,14 +893,6 @@
         }
       });
     }
-    // Home route selector (moved from login)
-    const homeRouteSelect = qs("homeRouteSelect");
-    if (homeRouteSelect) {
-      homeRouteSelect.addEventListener("change", event => {
-        state.selectedRoute = event.target.value;
-        renderMobile();
-      });
-    }
     qs("refreshMobile").addEventListener("click", async () => {
       await refreshData();
       renderMobile();
@@ -730,11 +928,48 @@
   }
 
   function renderForecast() {
-    const rows = (state.demand.forecast || []).slice(0, 24);
+    const allRows = state.demand.forecast || [];
+    const rows = allRows.slice(0, 24);
     const max = Math.max(1, ...rows.map(row => row.expected_load || 0));
+    const routeStats = forecastRouteStats(allRows);
+    const pressure = routeStats.slice(0, 6);
+    const summary = qs("forecastSummary");
+    if (summary) {
+      summary.innerHTML = pressure.length
+        ? pressure.map(item => `
+            <article class="forecast-card ${item.level}">
+              <span>${escapeHtml(item.route)}</span>
+              <strong>${item.peakLoad.toFixed(1)}</strong>
+              <p>${escapeHtml(item.routeName)} - peak ${escapeHtml(item.peakTime)} - ${escapeHtml(item.levelLabel)}</p>
+            </article>
+          `).join("")
+        : `<p class="empty-copy">No demand summary available.</p>`;
+    }
+    const advice = qs("dispatchAdvice");
+    if (advice) {
+      const actions = buildDispatchAdvice(pressure);
+      advice.innerHTML = actions.length
+        ? actions.map(item => `
+            <article class="dispatch-card ${item.level}">
+              <div>
+                <h3>${escapeHtml(item.title)}</h3>
+                <p>${escapeHtml(item.detail)}</p>
+              </div>
+              <button class="mini-action" data-demand-route="${escapeHtml(item.route)}" type="button">Show fleet</button>
+            </article>
+          `).join("")
+        : `<p class="empty-copy">Forecast is calm. Keep normal headways and monitor live load.</p>`;
+      advice.querySelectorAll("[data-demand-route]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.operatorRouteFilter = button.dataset.demandRoute;
+          activateOperatorTab("opsFleet");
+          renderOperator();
+        });
+      });
+    }
     qs("forecastBars").innerHTML = rows.length
       ? rows.map(row => `
-          <span class="forecast-bar" title="${escapeHtml(row.route)} ${row.expected_load}" style="height:${Math.max(8, (row.expected_load / max) * 100)}%">
+          <span class="forecast-bar ${forecastLevel(row.expected_load).level}" title="${escapeHtml(row.route)} ${row.expected_load}" style="height:${Math.max(8, (row.expected_load / max) * 100)}%">
             <b>${escapeHtml(row.route)}</b>
           </span>
         `).join("")
@@ -744,13 +979,71 @@
       : "";
   }
 
+  function forecastRouteStats(rows) {
+    const grouped = rows.reduce((accumulator, row) => {
+      const route = row.route || "unknown";
+      if (!accumulator[route]) accumulator[route] = [];
+      accumulator[route].push(row);
+      return accumulator;
+    }, {});
+    return Object.entries(grouped).map(([route, items]) => {
+      const peak = items.reduce((best, row) => Number(row.expected_load || 0) > Number(best.expected_load || 0) ? row : best, items[0]);
+      const average = items.reduce((sum, row) => sum + Number(row.expected_load || 0), 0) / Math.max(1, items.length);
+      const liveVehicles = state.vehicles.filter(vehicle => vehicle.route === route);
+      const liveSeats = liveVehicles.reduce((sum, vehicle) => sum + Math.max(0, Number(vehicle.capacity || 0) - Number(vehicle.occupancy || 0)), 0);
+      const level = forecastLevel(Number(peak.expected_load || 0));
+      return {
+        route,
+        routeName: routeName(route),
+        peakLoad: Number(peak.expected_load || 0),
+        averageLoad: average,
+        peakTime: formatHour(peak.timestamp),
+        liveVehicles: liveVehicles.length,
+        liveSeats,
+        level: level.level,
+        levelLabel: level.label,
+      };
+    }).sort((left, right) => right.peakLoad - left.peakLoad);
+  }
+
+  function forecastLevel(load) {
+    if (load >= 11) return { level: "critical", label: "add capacity" };
+    if (load >= 9.5) return { level: "watch", label: "watch headway" };
+    return { level: "normal", label: "normal service" };
+  }
+
+  function buildDispatchAdvice(stats) {
+    return stats
+      .filter(item => item.level !== "normal" || item.liveSeats < 8)
+      .slice(0, 4)
+      .map(item => {
+        const scarceSeats = item.liveVehicles ? item.liveSeats < 8 : true;
+        const title = item.level === "critical"
+          ? `Stage spare PUVs for Route ${item.route}`
+          : `Monitor Route ${item.route}`;
+        const detail = scarceSeats
+          ? `${item.routeName}: forecast peaks at ${item.peakLoad.toFixed(1)} around ${item.peakTime}, with only ${item.liveSeats} visible spare seats now.`
+          : `${item.routeName}: forecast peaks at ${item.peakLoad.toFixed(1)} around ${item.peakTime}; keep dispatch spacing tight.`;
+        return { route: item.route, level: item.level, title, detail };
+      });
+  }
+
+  function formatHour(timestamp) {
+    if (!timestamp) return "--";
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return "--";
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
   function renderOperator() {
     qs("opVehicleCount").textContent = state.summary.vehicle_count ?? 0;
     qs("opAlertCount").textContent = state.summary.active_alerts ?? 0;
     qs("opAvgLoad").textContent = state.summary.average_occupancy ?? 0;
     qs("opOverloaded").textContent = state.summary.overloaded ?? 0;
-    qs("operatorFleet").innerHTML = state.vehicles.length
-      ? state.vehicles.map(vehicle => `
+    renderOperatorFilters();
+    const filteredVehicles = filteredOperatorVehicles();
+    qs("operatorFleet").innerHTML = filteredVehicles.length
+      ? filteredVehicles.map(vehicle => `
           <article>
             <div>
               <h3>${escapeHtml(vehicle.vehicle_id)}</h3>
@@ -760,38 +1053,102 @@
             <span>${vehicle.occupancy}/${vehicle.capacity}</span>
             <span class="occupancy-pill ${tierClass(vehicle.tier)}">${tierLabel(vehicle.tier)}</span>
             <span>${vehicle.route_deviation?.anomaly ? "Verify route" : "On route"}</span>
-            <button class="mini-action" data-zoom-vehicle="${escapeHtml(vehicle.vehicle_id)}">Zoom</button>
+            <div class="fleet-actions">
+              <button class="mini-action" data-zoom-vehicle="${escapeHtml(vehicle.vehicle_id)}">Zoom</button>
+              <button class="mini-action" data-alert-vehicle="${escapeHtml(vehicle.vehicle_id)}" data-alert-route="${escapeHtml(vehicle.route)}">Flag</button>
+            </div>
           </article>
         `).join("")
-      : `<p class="empty-copy">No telemetry received yet.</p>`;
+      : `<p class="empty-copy">No vehicles match the current filters.</p>`;
     document.querySelectorAll("[data-zoom-vehicle]").forEach(button => {
       button.addEventListener("click", () => zoomVehicle(button.dataset.zoomVehicle));
     });
+    document.querySelectorAll("[data-alert-vehicle]").forEach(button => {
+      button.addEventListener("click", () => createAlert(button.dataset.alertVehicle, button.dataset.alertRoute));
+    });
 
     qs("operatorAlerts").innerHTML = state.alerts.length
-      ? state.alerts.map(alert => `
-          <article class="alert-card ${escapeHtml(alert.severity)}">
-            <div>
-              <h3>${escapeHtml(alert.severity).toUpperCase()} - ${escapeHtml(alert.vehicle_id)}</h3>
-              <p>${escapeHtml(alert.message)}</p>
-              <small>Route ${escapeHtml(alert.route)} - ${new Date(alert.timestamp).toLocaleTimeString()}</small>
-            </div>
-            <button class="button secondary ack-button" data-alert="${escapeHtml(alert.id)}">Verify</button>
-          </article>
-        `).join("")
+      ? state.alerts.map(renderAlertCard).join("")
       : `<p class="empty-copy">No active operator alerts.</p>`;
-    document.querySelectorAll(".ack-button").forEach(button => {
-      button.addEventListener("click", async () => {
-        await getJson(`/alerts/${button.dataset.alert}/ack`, { method: "POST" });
-        await refreshData();
-        renderOperator();
-      });
-    });
+    bindAlertActions(qs("operatorAlerts"));
     drawMap("operatorMap");
     renderForecast();
     renderDatabaseStatus();
     renderIncidentLog();
     renderRoutesAdmin();
+  }
+
+  function renderAlertCard(alert) {
+    const status = alert.verification_status || (alert.acknowledged ? "verified" : "open");
+    const statusLabel = status.replace("_", " ");
+    return `
+      <article class="alert-card ${escapeHtml(alert.severity)} ${escapeHtml(status)}">
+        <div>
+          <div class="alert-title-row">
+            <h3>${escapeHtml(alert.severity).toUpperCase()} - ${escapeHtml(alert.vehicle_id)}</h3>
+            <span class="verification-pill ${escapeHtml(status)}">${escapeHtml(statusLabel)}</span>
+          </div>
+          <p>${escapeHtml(alert.message)}</p>
+          <small>Route ${escapeHtml(alert.route)} - ${new Date(alert.timestamp).toLocaleTimeString()}</small>
+          <textarea class="verification-note" data-note-for="${escapeHtml(alert.id)}" rows="2" placeholder="Verification note"></textarea>
+        </div>
+        <div class="verification-actions">
+          <button class="mini-action" data-alert-action="verified" data-alert="${escapeHtml(alert.id)}">Confirm</button>
+          <button class="mini-action" data-alert-action="false_alarm" data-alert="${escapeHtml(alert.id)}">False alarm</button>
+          <button class="mini-action danger" data-alert-action="escalated" data-alert="${escapeHtml(alert.id)}">Escalate</button>
+          <button class="mini-action" data-zoom-vehicle="${escapeHtml(alert.vehicle_id)}">Map</button>
+        </div>
+      </article>
+    `;
+  }
+
+  function bindAlertActions(scope) {
+    if (!scope) return;
+    scope.querySelectorAll("[data-alert-action]").forEach(button => {
+      button.addEventListener("click", async () => {
+        const alertId = button.dataset.alert;
+        const note = scope.querySelector(`[data-note-for="${alertId}"]`)?.value.trim() || "";
+        await verifyAlert(alertId, button.dataset.alertAction, note);
+      });
+    });
+    scope.querySelectorAll("[data-zoom-vehicle]").forEach(button => {
+      button.addEventListener("click", () => zoomVehicle(button.dataset.zoomVehicle));
+    });
+  }
+
+  async function verifyAlert(alertId, action, note) {
+    await getJson(`/alerts/${alertId}/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, note }),
+    });
+    await refreshData();
+    renderOperator();
+  }
+
+  function renderOperatorFilters() {
+    const routeFilter = qs("fleetRouteFilter");
+    if (routeFilter) {
+      const routes = ["all", ...new Set(state.routes.map(route => route.route))];
+      routeFilter.innerHTML = routes.map(route => `<option value="${escapeHtml(route)}">${escapeHtml(route === "all" ? "All routes" : route)}</option>`).join("");
+      if (!routes.includes(state.operatorRouteFilter)) state.operatorRouteFilter = "all";
+      routeFilter.value = state.operatorRouteFilter;
+    }
+    const tierFilter = qs("fleetTierFilter");
+    if (tierFilter) tierFilter.value = state.operatorTierFilter;
+    const search = qs("fleetSearch");
+    if (search && document.activeElement !== search) search.value = state.operatorFleetQuery;
+  }
+
+  function filteredOperatorVehicles() {
+    const query = state.operatorFleetQuery.toLowerCase();
+    return state.vehicles.filter(vehicle => {
+      const route = state.routes.find(item => item.route === vehicle.route);
+      const haystack = `${vehicle.vehicle_id} ${vehicle.route} ${route?.name || ""} ${route?.city || ""} ${vehicle.status || ""}`.toLowerCase();
+      return (!query || haystack.includes(query))
+        && (state.operatorRouteFilter === "all" || vehicle.route === state.operatorRouteFilter)
+        && (state.operatorTierFilter === "all" || vehicle.tier === state.operatorTierFilter);
+    });
   }
 
   function renderRouteDirectory() {
@@ -862,8 +1219,9 @@
     `).join("");
     container.querySelectorAll("[data-preview-route]").forEach(button => {
       button.addEventListener("click", () => {
-        drawMap("mobileMap", button.dataset.previewRoute);
-        setTimeout(() => fitRoute("mobileMap", button.dataset.previewRoute), 100);
+        state.selectedRoute = button.dataset.previewRoute;
+        activateMobileTab("mapTab");
+        previewRoute(button.dataset.previewRoute, "mobileMap");
       });
     });
     container.querySelectorAll("[data-select-route]").forEach(button => {
@@ -873,15 +1231,6 @@
         renderMobile();
       });
     });
-    if (matched[0] && matched[0].route !== state.selectedRoute) {
-      const first = matched[0].route;
-      state.selectedRoute = first;
-      const mapRoute = qs("mapRoute");
-      const homeRoute = qs("homeRouteSelect");
-      if (mapRoute) mapRoute.value = first;
-      if (homeRoute) homeRoute.value = first;
-      drawMap("mobileMap", first);
-    }
   }
 
   function findNearestRoute(lat, lon) {
@@ -944,14 +1293,34 @@
     }
   }
 
+  function previewRoute(routeId, containerId = "operatorMap") {
+    const route = state.routes.find(item => item.route === routeId);
+    if (!route) return;
+    state.selectedRoute = routeId;
+    const panel = qs("routePreviewPanel");
+    if (panel && containerId === "routePreviewMap") {
+      panel.classList.remove("hidden");
+      qs("routePreviewTitle").textContent = `${route.route} ${route.name}`;
+      const summary = routeSummary(route);
+      qs("routePreviewMeta").textContent = `${cityName(route)} - ${summary.stopCount} stops - ${summary.vehicleCount} live PUVs`;
+    }
+    drawMap(containerId, routeId);
+    setTimeout(() => fitRoute(containerId, routeId), 120);
+  }
+
   function zoomVehicle(vehicleId) {
     const vehicle = state.vehicles.find(item => item.vehicle_id === vehicleId);
     if (!vehicle || !isMapCoordinate(vehicle)) return;
     state.selectedVehicleId = vehicleId;
     state.selectedRoute = vehicle.route;
+    if (state.maps.operatorMap) activateOperatorTab("opsOverview");
+    if (state.maps.mobileMap) activateMobileTab("mapTab");
+    drawMap(state.maps.operatorMap ? "operatorMap" : "mobileMap", vehicle.route);
     const map = state.maps.operatorMap || state.maps.mobileMap;
     if (map) {
-      map.setView([Number(vehicle.latitude), Number(vehicle.longitude)], 17);
+      setTimeout(() => {
+        map.setView([Number(vehicle.latitude), Number(vehicle.longitude)], 17);
+      }, 100);
     }
   }
 
@@ -986,9 +1355,7 @@
       qs('routePolyline').value = (r.polyline || []).map(p => `${p.latitude},${p.longitude}`).join('\n');
     }));
     document.querySelectorAll('[data-route-preview]').forEach(btn => btn.addEventListener('click', e => {
-      const route = btn.dataset.routePreview;
-      drawMap('operatorMap', route);
-      setTimeout(() => fitRoute('operatorMap', route), 100);
+      previewRoute(btn.dataset.routePreview, 'routePreviewMap');
     }));
     document.querySelectorAll('[data-route]').forEach(btn => {
       if (btn.classList.contains('delete-route') || btn.textContent.trim().toLowerCase()==='delete') {
@@ -1105,13 +1472,85 @@
 
   function renderDatabaseStatus() {
     const tables = state.database.tables || {};
+    const stats = state.database.stats || {};
+    const routeLoads = state.database.route_loads || [];
+    const vehicleRoutes = state.database.vehicle_routes || [];
+    const alertStatuses = state.database.alert_statuses || [];
+    const recentChats = state.database.recent_chats || [];
+    const maxSamples = Math.max(1, ...routeLoads.map(row => Number(row.samples || 0)));
     qs("databaseStatus").innerHTML = Object.keys(tables).length
-      ? Object.entries(tables).map(([name, count]) => `
-          <article>
-            <span>${escapeHtml(name)}</span>
-            <strong>${count}</strong>
-          </article>
-        `).join("") + `<p class="db-path">${escapeHtml(state.database.path || "")}</p>`
+      ? `
+        <div class="db-summary-row">
+          ${[
+            ["Telemetry samples", stats.telemetry_samples ?? tables.telemetry_logs ?? 0],
+            ["Active route groups", stats.active_vehicle_routes ?? 0],
+            ["Chatbot queries", stats.chat_queries ?? tables.chatbot_queries ?? 0],
+            ["Open alerts", stats.open_alerts ?? 0],
+          ].map(([label, value]) => `
+            <article>
+              <span>${escapeHtml(label)}</span>
+              <strong>${escapeHtml(value)}</strong>
+            </article>
+          `).join("")}
+        </div>
+        <div class="db-visual-grid">
+          <section>
+            <h3>Telemetry by route</h3>
+            <div class="db-bars">
+              ${routeLoads.length ? routeLoads.map(row => `
+                <div class="db-bar-row">
+                  <span>${escapeHtml(row.route)}</span>
+                  <i style="width:${Math.max(8, (Number(row.samples || 0) / maxSamples) * 100)}%"></i>
+                  <strong>${escapeHtml(row.samples)}</strong>
+                </div>
+              `).join("") : `<p class="empty-copy">No telemetry samples saved yet.</p>`}
+            </div>
+          </section>
+          <section>
+            <h3>Live route load</h3>
+            <div class="db-route-table">
+              ${vehicleRoutes.length ? vehicleRoutes.map(row => `
+                <article>
+                  <span>Route ${escapeHtml(row.route)}</span>
+                  <strong>${escapeHtml(row.vehicles)} PUVs</strong>
+                  <p>Avg load ${escapeHtml(row.average_occupancy ?? 0)} - crowded ${escapeHtml(row.crowded ?? 0)}</p>
+                </article>
+              `).join("") : `<p class="empty-copy">No live vehicle states yet.</p>`}
+            </div>
+          </section>
+        </div>
+        <div class="db-visual-grid">
+          <section>
+            <h3>Alert status</h3>
+            <div class="db-chip-row">
+              ${alertStatuses.length ? alertStatuses.map(row => `<span>${escapeHtml(row.verification_status || "open")} <strong>${escapeHtml(row.count)}</strong></span>`).join("") : `<p class="empty-copy">No alert records.</p>`}
+            </div>
+          </section>
+          <section>
+            <h3>Recent chatbot queries</h3>
+            <div class="db-chat-list">
+              ${recentChats.length ? recentChats.map(row => `
+                <article>
+                  <strong>${escapeHtml(row.query)}</strong>
+                  <p>${escapeHtml(row.answer)}</p>
+                </article>
+              `).join("") : `<p class="empty-copy">No chatbot history yet.</p>`}
+            </div>
+          </section>
+        </div>
+        <details class="db-table-counts">
+          <summary>Table counts and database path</summary>
+          <div class="db-summary-row compact">
+            ${Object.entries(tables).map(([name, count]) => `
+              <article>
+                <span>${escapeHtml(name)}</span>
+                <strong>${count}</strong>
+              </article>
+            `).join("")}
+          </div>
+          <p class="db-path">${escapeHtml(state.database.path || "")}</p>
+        </details>
+      `
       : `<p class="empty-copy">Database has not been initialized.</p>`;
   }
 
@@ -1122,8 +1561,9 @@
             <div>
               <h3>${escapeHtml(incident.vehicle_id)} - ${escapeHtml(incident.severity).toUpperCase()}</h3>
               <p>${escapeHtml(incident.message)}</p>
+              ${incident.resolution_note ? `<small>${escapeHtml(incident.resolution_note)}</small>` : ""}
             </div>
-            <span>${incident.acknowledged ? "Verified" : "Open"}</span>
+            <span>${escapeHtml((incident.verification_status || (incident.acknowledged ? "verified" : "open")).replace("_", " "))}</span>
           </article>
         `).join("")
       : `<p class="empty-copy">No incident history yet.</p>`;
@@ -1138,6 +1578,27 @@
       await refreshData();
       renderOperator();
     });
+    const fleetSearch = qs("fleetSearch");
+    if (fleetSearch) {
+      fleetSearch.addEventListener("input", event => {
+        state.operatorFleetQuery = event.target.value.trim();
+        renderOperator();
+      });
+    }
+    const routeFilter = qs("fleetRouteFilter");
+    if (routeFilter) {
+      routeFilter.addEventListener("change", event => {
+        state.operatorRouteFilter = event.target.value || "all";
+        renderOperator();
+      });
+    }
+    const tierFilter = qs("fleetTierFilter");
+    if (tierFilter) {
+      tierFilter.addEventListener("change", event => {
+        state.operatorTierFilter = event.target.value || "all";
+        renderOperator();
+      });
+    }
     setInterval(async () => {
       await refreshData();
       renderOperator();
@@ -1146,18 +1607,20 @@
 
   function initOperatorTabs() {
     document.querySelectorAll(".ops-tabs button").forEach(button => {
-      button.addEventListener("click", () => {
-        document.querySelectorAll(".ops-tabs button").forEach(item => item.classList.remove("active"));
-        document.querySelectorAll(".ops-tab-panel").forEach(item => item.classList.remove("active"));
-        button.classList.add("active");
-        qs(button.dataset.opsTab).classList.add("active");
-        setTimeout(() => {
-          Object.values(state.maps).forEach(map => {
-            try { map.invalidateSize(); } catch (e) {}
-          });
-        }, 100);
-      });
+      button.addEventListener("click", () => activateOperatorTab(button.dataset.opsTab));
     });
+  }
+
+  function activateOperatorTab(tabId) {
+    const target = qs(tabId);
+    if (!target) return;
+    document.querySelectorAll(".ops-tabs button").forEach(item => item.classList.toggle("active", item.dataset.opsTab === tabId));
+    document.querySelectorAll(".ops-tab-panel").forEach(item => item.classList.toggle("active", item.id === tabId));
+    setTimeout(() => {
+      Object.values(state.maps).forEach(map => {
+        try { map.invalidateSize(); } catch (e) {}
+      });
+    }, 100);
   }
 
   async function createAlert(vehicle_id, route, message) {

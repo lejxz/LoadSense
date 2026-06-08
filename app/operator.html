@@ -62,7 +62,6 @@
           </div>
         </div>
         <div id="operatorMap" class="live-map wide-map">
-          <button id="opRecenterBtn" class="map-recenter" title="Center map on fleet or my location" aria-label="Center map on fleet or my location">+</button>
         </div>
       </section>
       </section>
@@ -114,6 +113,16 @@
             <div id="routeImportPreview" class="import-preview"></div>
           </div>
           <textarea id="importRoutes" placeholder='Paste JSON array of routes here (route,name,polyline)' style="width:100%;height:110px;margin-top:8px;display:none"></textarea>
+          <div id="routePreviewPanel" class="route-preview-panel hidden">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Route preview</p>
+                <h2 id="routePreviewTitle">Selected route</h2>
+              </div>
+            </div>
+            <div id="routePreviewMap" class="live-map route-preview-map"></div>
+            <p id="routePreviewMeta" class="muted"></p>
+          </div>
           <div id="routesTable" style="margin-top:12px"></div>
         </div>
       </section>
@@ -127,6 +136,17 @@
             <h2>Fleet status</h2>
           </div>
         </div>
+        <div class="ops-toolbar">
+          <input id="fleetSearch" placeholder="Search vehicle, route, city" />
+          <select id="fleetRouteFilter"></select>
+          <select id="fleetTierFilter">
+            <option value="all">All load states</option>
+            <option value="green">Seats available</option>
+            <option value="yellow">Standing only</option>
+            <option value="red">At capacity</option>
+            <option value="blinking_red">Overloaded</option>
+          </select>
+        </div>
         <div id="operatorFleet" class="fleet-table"></div>
       </section>
       </section>
@@ -139,6 +159,8 @@
             <h2>Demand forecast</h2>
           </div>
         </div>
+        <div id="forecastSummary" class="forecast-summary"></div>
+        <div id="dispatchAdvice" class="dispatch-advice"></div>
         <div id="forecastBars" class="forecast-bars"></div>
         <p id="forecastMeta" class="muted"></p>
       </section>

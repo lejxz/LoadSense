@@ -117,6 +117,21 @@ def acknowledge_alert(alert_id: str):
     return alert
 
 
+class VerifyAlert(BaseModel):
+    action: str = "verified"
+    note: str = ""
+
+
+@router.post("/alerts/{alert_id}/verify")
+def verify_alert(alert_id: str, payload: VerifyAlert):
+    if payload.action not in {"verified", "false_alarm", "escalated"}:
+        raise HTTPException(status_code=400, detail="action must be verified, false_alarm, or escalated")
+    alert = fleet_store.verify_alert(alert_id, action=payload.action, note=payload.note.strip())
+    if alert is None:
+        raise HTTPException(status_code=404, detail="alert not found")
+    return alert
+
+
 @router.get("/incidents")
 def get_incidents(limit: int = 50):
     return {"incidents": fleet_store.incidents(limit=limit)}
@@ -140,8 +155,8 @@ def get_routes(route: Optional[str] = None, q: Optional[str] = None):
 
 
 @router.get("/places")
-def get_places(q: Optional[str] = None, limit: int = 12):
-    return {"places": search_places(list_routes(), q or "", limit=limit)}
+def get_places(q: Optional[str] = None, limit: int = 12, remote: bool = True):
+    return {"places": search_places(list_routes(), q or "", limit=limit, include_remote=remote)}
 
 
 @router.post("/suggestions")

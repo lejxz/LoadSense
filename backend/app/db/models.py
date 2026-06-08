@@ -31,3 +31,6 @@ class OperatorAlert(BaseModel):
     message: str
     timestamp: str
     acknowledged: bool = False
+    verification_status: str = "open"
+    resolution_note: Optional[str] = None
+    verified_at: Optional[str] = None

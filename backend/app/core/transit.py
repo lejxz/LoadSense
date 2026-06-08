@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import math
 import re
+import urllib.error
+import urllib.parse
+import urllib.request
 from typing import Any, Iterable, Optional
 
 
 WALKING_RADIUS_METERS = 500.0
 RELAXED_RADIUS_METERS = 1500.0
 DEFAULT_SPEED_KPH = 30.0
+PHOTON_SEARCH_URL = "https://photon.komoot.io/api/"
 
 
 def _stop(name: str, latitude: float, longitude: float) -> dict[str, Any]:
@@ -169,18 +173,129 @@ SYNTHETIC_REGIONAL_ROUTES: list[dict[str, Any]] = [
             _stop("Festive Walk Iloilo", 10.7177, 122.5452),
         ],
     },
+    {
+        "route": "SG-BTL",
+        "name": "Singapore Downtown Line: Bukit Panjang - Expo",
+        "city": "Singapore",
+        "zone": "Downtown Line",
+        "type": "Metro",
+        "stops": [
+            _stop("Bukit Panjang", 1.3790, 103.7615),
+            _stop("Botanic Gardens", 1.3224, 103.8154),
+            _stop("Stevens", 1.3200, 103.8260),
+            _stop("Newton", 1.3123, 103.8379),
+            _stop("Bugis", 1.3007, 103.8560),
+            _stop("Chinatown", 1.2844, 103.8434),
+            _stop("MacPherson", 1.3266, 103.8904),
+            _stop("Tampines", 1.3547, 103.9437),
+            _stop("Expo", 1.3352, 103.9629),
+        ],
+    },
+    {
+        "route": "SG-EWL",
+        "name": "Singapore East West Line: Jurong East - Changi Airport",
+        "city": "Singapore",
+        "zone": "East West Line",
+        "type": "Metro",
+        "stops": [
+            _stop("Jurong East", 1.3331, 103.7420),
+            _stop("Clementi", 1.3151, 103.7652),
+            _stop("Buona Vista", 1.3072, 103.7904),
+            _stop("Tiong Bahru", 1.2862, 103.8271),
+            _stop("City Hall", 1.2931, 103.8521),
+            _stop("Paya Lebar", 1.3182, 103.8930),
+            _stop("Bedok", 1.3240, 103.9302),
+            _stop("Tanah Merah", 1.3273, 103.9465),
+            _stop("Changi Airport", 1.3574, 103.9879),
+        ],
+    },
+    {
+        "route": "HK-ISL",
+        "name": "Hong Kong Island Line: Kennedy Town - Chai Wan",
+        "city": "Hong Kong",
+        "zone": "Island Line",
+        "type": "Metro",
+        "stops": [
+            _stop("Kennedy Town", 22.2812, 114.1288),
+            _stop("HKU", 22.2836, 114.1355),
+            _stop("Sheung Wan", 22.2869, 114.1524),
+            _stop("Central", 22.2819, 114.1582),
+            _stop("Admiralty", 22.2798, 114.1648),
+            _stop("Wan Chai", 22.2770, 114.1734),
+            _stop("Causeway Bay", 22.2802, 114.1858),
+            _stop("North Point", 22.2911, 114.2004),
+            _stop("Chai Wan", 22.2647, 114.2370),
+        ],
+    },
+    {
+        "route": "JPN-YMN",
+        "name": "Tokyo Yamanote Loop: Shinjuku - Tokyo - Ueno",
+        "city": "Tokyo",
+        "zone": "Yamanote",
+        "type": "Rail",
+        "stops": [
+            _stop("Shinjuku", 35.6909, 139.7003),
+            _stop("Shibuya", 35.6580, 139.7016),
+            _stop("Shinagawa", 35.6285, 139.7388),
+            _stop("Tokyo Station", 35.6812, 139.7671),
+            _stop("Akihabara", 35.6984, 139.7730),
+            _stop("Ueno", 35.7138, 139.7770),
+            _stop("Ikebukuro", 35.7289, 139.7104),
+        ],
+    },
+]
+
+
+PLACE_DATABASE: list[dict[str, Any]] = [
+    {"name": "Cebu City", "city": "Cebu", "latitude": 10.3157, "longitude": 123.8854, "aliases": ["cebu", "cebu city"], "kind": "city"},
+    {"name": "Mandaue City", "city": "Cebu", "latitude": 10.3333, "longitude": 123.9333, "aliases": ["mandaue", "mandaue city"], "kind": "city"},
+    {"name": "Lapu-Lapu City", "city": "Cebu", "latitude": 10.3103, "longitude": 123.9494, "aliases": ["lapu lapu", "lapu-lapu", "mactan"], "kind": "city"},
+    {"name": "Talisay City Cebu", "city": "Cebu", "latitude": 10.2447, "longitude": 123.8494, "aliases": ["talisay", "talisay cebu", "talisay city"], "kind": "city"},
+    {"name": "Minglanilla", "city": "Cebu", "latitude": 10.2447, "longitude": 123.7964, "aliases": ["minglanilla cebu", "mingla"], "kind": "town"},
+    {"name": "Naga City Cebu", "city": "Cebu", "latitude": 10.2090, "longitude": 123.7580, "aliases": ["naga", "naga cebu", "naga city"], "kind": "city"},
+    {"name": "San Fernando Cebu", "city": "Cebu", "latitude": 10.1625, "longitude": 123.7076, "aliases": ["san fernando", "san fernando cebu"], "kind": "town"},
+    {"name": "Carcar City", "city": "Cebu", "latitude": 10.1061, "longitude": 123.6402, "aliases": ["carcar", "carcar cebu"], "kind": "city"},
+    {"name": "Consolacion", "city": "Cebu", "latitude": 10.3776, "longitude": 123.9575, "aliases": ["consolacion cebu"], "kind": "town"},
+    {"name": "Liloan", "city": "Cebu", "latitude": 10.3991, "longitude": 123.9992, "aliases": ["liloan cebu"], "kind": "town"},
+    {"name": "Compostela Cebu", "city": "Cebu", "latitude": 10.4550, "longitude": 124.0106, "aliases": ["compostela"], "kind": "town"},
+    {"name": "Danao City", "city": "Cebu", "latitude": 10.5208, "longitude": 124.0275, "aliases": ["danao", "danao cebu"], "kind": "city"},
+    {"name": "Cordova Cebu", "city": "Cebu", "latitude": 10.2523, "longitude": 123.9495, "aliases": ["cordova"], "kind": "town"},
+    {"name": "Toledo City", "city": "Cebu", "latitude": 10.3773, "longitude": 123.6386, "aliases": ["toledo", "toledo cebu"], "kind": "city"},
+    {"name": "Balamban", "city": "Cebu", "latitude": 10.5039, "longitude": 123.7153, "aliases": ["balamban cebu"], "kind": "town"},
+    {"name": "Dumanjug", "city": "Cebu", "latitude": 10.0570, "longitude": 123.4365, "aliases": ["dumanjug cebu"], "kind": "town"},
+    {"name": "Barili", "city": "Cebu", "latitude": 10.1150, "longitude": 123.5103, "aliases": ["barili cebu"], "kind": "town"},
+    {"name": "Moalboal", "city": "Cebu", "latitude": 9.9436, "longitude": 123.3996, "aliases": ["moalboal cebu"], "kind": "town"},
+    {"name": "Samboan", "city": "Cebu", "latitude": 9.5276, "longitude": 123.3068, "aliases": ["samboan cebu"], "kind": "town"},
+    {"name": "Oslob", "city": "Cebu", "latitude": 9.5211, "longitude": 123.4315, "aliases": ["oslob cebu"], "kind": "town"},
+    {"name": "Bogo City", "city": "Cebu", "latitude": 11.0517, "longitude": 124.0055, "aliases": ["bogo", "bogo cebu"], "kind": "city"},
+    {"name": "Daanbantayan", "city": "Cebu", "latitude": 11.2468, "longitude": 124.0160, "aliases": ["daan bantayan", "daanbantayan cebu"], "kind": "town"},
+    {"name": "Basak Cebu", "city": "Cebu City", "latitude": 10.2847, "longitude": 123.8647, "aliases": ["basak", "basak cebu", "basak pardo", "basak cebu city"], "kind": "barangay"},
+    {"name": "Basak Lapu-Lapu", "city": "Lapu-Lapu City", "latitude": 10.2936, "longitude": 123.9634, "aliases": ["basak lapu lapu", "basak mactan"], "kind": "barangay"},
+    {"name": "Pardo", "city": "Cebu City", "latitude": 10.2822, "longitude": 123.8527, "aliases": ["pardo cebu"], "kind": "barangay"},
+    {"name": "Bulacao", "city": "Cebu City", "latitude": 10.2723, "longitude": 123.8500, "aliases": ["bulacao cebu"], "kind": "barangay"},
+    {"name": "Punta Princesa", "city": "Cebu City", "latitude": 10.2878, "longitude": 123.8748, "aliases": ["punta", "punta princesa cebu"], "kind": "barangay"},
+    {"name": "Tabunok", "city": "Talisay City", "latitude": 10.2651, "longitude": 123.8429, "aliases": ["talisay tabunok", "tabunok talisay"], "kind": "barangay"},
+    {"name": "Guadalupe Cebu", "city": "Cebu City", "latitude": 10.3140, "longitude": 123.8830, "aliases": ["guadalupe", "guadalupe cebu"], "kind": "barangay"},
+    {"name": "Lahug", "city": "Cebu City", "latitude": 10.3370, "longitude": 123.8995, "aliases": ["lahug cebu"], "kind": "barangay"},
+    {"name": "Talamban", "city": "Cebu City", "latitude": 10.3700, "longitude": 123.9120, "aliases": ["talamban cebu"], "kind": "barangay"},
+    {"name": "Colon Street", "city": "Cebu City", "latitude": 10.2964, "longitude": 123.8997, "aliases": ["colon"], "kind": "landmark"},
+    {"name": "Carbon Market", "city": "Cebu City", "latitude": 10.2927, "longitude": 123.9006, "aliases": ["carbon", "carbon market"], "kind": "landmark"},
+    {"name": "Fuente Osmena Circle", "city": "Cebu City", "latitude": 10.3093, "longitude": 123.8930, "aliases": ["fuente", "fuente osmena"], "kind": "landmark"},
+    {"name": "Cebu IT Park", "city": "Cebu City", "latitude": 10.3306, "longitude": 123.9067, "aliases": ["it park", "cebu it park"], "kind": "landmark"},
+    {"name": "South Bus Terminal Cebu", "city": "Cebu City", "latitude": 10.2948, "longitude": 123.8938, "aliases": ["south bus", "south bus terminal", "cebu south bus terminal"], "kind": "terminal"},
+    {"name": "North Bus Terminal Cebu", "city": "Mandaue City", "latitude": 10.3358, "longitude": 123.9324, "aliases": ["north bus", "north bus terminal", "cebu north bus terminal"], "kind": "terminal"},
 ]
 
 
 LANDMARKS: list[dict[str, Any]] = [
     {"name": "Ayala Center Cebu", "city": "Cebu City", "latitude": 10.3173, "longitude": 123.9058, "aliases": ["ayala", "ayala center"]},
     {"name": "SM City Cebu", "city": "Cebu City", "latitude": 10.3115, "longitude": 123.9183, "aliases": ["sm cebu", "sm city"]},
-    {"name": "Colon Street", "city": "Cebu City", "latitude": 10.2964, "longitude": 123.8997, "aliases": ["colon"]},
-    {"name": "Carbon Market", "city": "Cebu City", "latitude": 10.2927, "longitude": 123.9006, "aliases": ["carbon", "carbon market"]},
-    {"name": "Fuente Osmena Circle", "city": "Cebu City", "latitude": 10.3093, "longitude": 123.8930, "aliases": ["fuente", "fuente osmena"]},
-    {"name": "Cebu IT Park", "city": "Cebu City", "latitude": 10.3306, "longitude": 123.9067, "aliases": ["it park", "cebu it park"]},
     {"name": "Parkmall Mandaue", "city": "Mandaue", "latitude": 10.3337, "longitude": 123.9336, "aliases": ["parkmall"]},
     {"name": "SM Seaside City Cebu", "city": "Cebu City", "latitude": 10.2810, "longitude": 123.8817, "aliases": ["sm seaside", "seaside"]},
+    {"name": "Changi Airport", "city": "Singapore", "latitude": 1.3574, "longitude": 103.9879, "aliases": ["changi", "singapore airport"]},
+    {"name": "Marina Bay", "city": "Singapore", "latitude": 1.2830, "longitude": 103.8600, "aliases": ["marina bay sands", "mbs"]},
+    {"name": "Central Hong Kong", "city": "Hong Kong", "latitude": 22.2819, "longitude": 114.1582, "aliases": ["central", "hong kong central"]},
+    {"name": "Shinjuku Station", "city": "Tokyo", "latitude": 35.6909, "longitude": 139.7003, "aliases": ["shinjuku"]},
 ]
 
 
@@ -201,19 +316,29 @@ ROUTE_METADATA: dict[str, dict[str, Any]] = {
 
 
 LANGUAGE_KEYWORDS = {
-    "ceb": ["asa", "paingon", "padung", "gikan", "unsa", "sakay", "dyip", "diri"],
-    "tl": ["saan", "papunta", "pumunta", "daan", "byahe", "sakay", "dito", "dyip"],
+    "ceb": ["asa", "paingon", "padung", "gikan", "unsa", "sakay", "dyip", "diri", "jeep"],
+    "tl": ["saan", "papunta", "pumunta", "daan", "byahe", "sakay", "dito", "dyip", "jeep"],
     "ilo": ["diin", "pakadto", "sakyan", "jeep"],
     "ilocano": ["sadino", "mapan", "lugan"],
+    "es": ["donde", "como", "tomar", "ruta", "autobus", "llegar", "hacia"],
+    "ja": ["eki", "densha", "basu", "doko", "made", "iku"],
 }
 
 
 DESTINATION_PATTERNS = [
+    r"(?:destination is|destination|destinasyon|padulngan|adtoan)\s+(.+)",
+    r"(?:need to go to|i need to go to|i want to go to|going to)\s+(.+)",
+    r"(?:which .*? should i take to reach|which .*? should i take to get to|what .*? should i take to reach)\s+(.+)",
     r"(?:how do i get to|how to get to|which .*? to|what .*? goes to|route to|going to|go to|reach|towards?|to)\s+(.+)",
     r"(?:saan .*? papunta sa|paano pumunta sa|papunta sa|papuntang|punta sa|daan sa|byahe sa)\s+(.+)",
     r"(?:asa .*? paingon sa|unsa .*? paingon sa|paingon sa|padung sa|punta sa)\s+(.+)",
     r"(?:diin .*? pakadto sa|pakadto sa)\s+(.+)",
     r"(?:sadino .*? mapan iti|mapan iti)\s+(.+)",
+]
+
+
+ORIGIN_PATTERNS = [
+    r"(?:my current location is at|my current location is|current location is at|current location is|i am at|im at|i'm at|from|gikan sa|gikan)\s+(.+?)(?:\s+i need|\s+i want|\s+what|\s+which|\s+how|\s+to reach|\s+going to|$)",
 ]
 
 
@@ -261,6 +386,12 @@ def infer_city(points: Iterable[dict[str, Any]], route_name: str = "") -> str:
         return "Iloilo City"
     if "metro manila" in name or "manila" in name:
         return "Metro Manila"
+    if "singapore" in name:
+        return "Singapore"
+    if "hong kong" in name:
+        return "Hong Kong"
+    if "tokyo" in name:
+        return "Tokyo"
     latitudes = [float(point["latitude"]) for point in points if _valid_coord(point)]
     longitudes = [float(point["longitude"]) for point in points if _valid_coord(point)]
     if not latitudes or not longitudes:
@@ -275,11 +406,26 @@ def infer_city(points: Iterable[dict[str, Any]], route_name: str = "") -> str:
         return "Iloilo City"
     if 10.15 <= lat <= 10.55 and 123.65 <= lon <= 124.10:
         return "Cebu"
+    if 1.2 <= lat <= 1.45 and 103.6 <= lon <= 104.1:
+        return "Singapore"
+    if 22.15 <= lat <= 22.45 and 113.9 <= lon <= 114.35:
+        return "Hong Kong"
+    if 35.55 <= lat <= 35.85 and 139.55 <= lon <= 139.9:
+        return "Tokyo"
     return "Philippines"
 
 
 def build_place_index(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     places: list[dict[str, Any]] = []
+    for place in PLACE_DATABASE:
+        places.append({
+            "name": place["name"],
+            "city": place["city"],
+            "latitude": place["latitude"],
+            "longitude": place["longitude"],
+            "aliases": place.get("aliases", []),
+            "kind": place.get("kind", "place"),
+        })
     for landmark in LANDMARKS:
         places.append({
             "name": landmark["name"],
@@ -287,11 +433,27 @@ def build_place_index(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "latitude": landmark["latitude"],
             "longitude": landmark["longitude"],
             "aliases": landmark.get("aliases", []),
-            "kind": "landmark",
+            "kind": landmark.get("kind", "landmark"),
         })
     for route in routes:
         city = route.get("city") or infer_city(route.get("polyline", []), route.get("name", ""))
-        for stop in route_points(route, prefer_stops=True):
+        points = route_points(route, prefer_stops=True)
+        center = _route_center(points)
+        if center:
+            places.append({
+                "name": f"Route {route.get('route')}",
+                "city": city,
+                "route": route.get("route"),
+                "latitude": center["latitude"],
+                "longitude": center["longitude"],
+                "aliases": [
+                    str(route.get("route", "")),
+                    str(route.get("name", "")),
+                    f"{route.get('route', '')} {route.get('name', '')}",
+                ],
+                "kind": "route",
+            })
+        for stop in points:
             places.append({
                 "name": stop["name"],
                 "city": city,
@@ -304,36 +466,114 @@ def build_place_index(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return _dedupe_places(places)
 
 
-def search_places(routes: list[dict[str, Any]], query: str = "", limit: int = 12) -> list[dict[str, Any]]:
+def search_places(routes: list[dict[str, Any]], query: str = "", limit: int = 12, include_remote: bool = True) -> list[dict[str, Any]]:
     places = build_place_index(routes)
     needle = normalize_text(query or "")
     if not needle:
-        return places[:limit]
+        return sorted(places, key=_place_sort_key)[:limit]
     scored: list[tuple[int, dict[str, Any]]] = []
     for place in places:
-        haystack = " ".join([place["name"], place.get("city", ""), *(place.get("aliases") or [])])
+        haystack = " ".join([place["name"], place.get("city", ""), place.get("route", ""), *(place.get("aliases") or [])])
         normalized = normalize_text(haystack)
-        if needle in normalized:
-            scored.append((100 + len(needle), place))
-        elif all(token in normalized for token in needle.split()):
-            scored.append((70 + len(needle), place))
-    scored.sort(key=lambda item: (-item[0], item[1]["name"]))
-    return [item[1] for item in scored[:limit]]
+        score = _text_match_score(needle, normalized)
+        if score:
+            score += _place_kind_boost(place, needle)
+            scored.append((score, place))
+    scored.sort(key=lambda item: (-item[0], _place_sort_key(item[1])))
+    local_results = [item[1] for item in scored[:limit]]
+    if not include_remote or len(needle) < 2:
+        return local_results
+    remote_results = search_remote_places(query, max(0, limit - len(local_results) + 4))
+    return _dedupe_places([*local_results, *remote_results])[:limit]
+
+
+def search_remote_places(query: str, limit: int = 8) -> list[dict[str, Any]]:
+    if limit <= 0:
+        return []
+    params = urllib.parse.urlencode({"q": query, "limit": min(limit, 12), "lang": "en"})
+    request = urllib.request.Request(
+        f"{PHOTON_SEARCH_URL}?{params}",
+        headers={
+            "User-Agent": "LoadSense/1.0 student-demo location search",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=1.8) as response:
+            payload = response.read().decode("utf-8")
+    except (OSError, urllib.error.URLError, TimeoutError, ValueError):
+        return []
+    try:
+        import json
+
+        features = json.loads(payload).get("features", [])
+    except Exception:
+        return []
+    places = []
+    for feature in features:
+        properties = feature.get("properties") or {}
+        geometry = feature.get("geometry") or {}
+        coordinates = geometry.get("coordinates") or []
+        if len(coordinates) < 2:
+            continue
+        name = properties.get("name") or properties.get("street") or properties.get("city")
+        if not name:
+            continue
+        city = properties.get("city") or properties.get("town") or properties.get("village") or properties.get("county") or properties.get("country") or ""
+        country = properties.get("country") or ""
+        kind = _photon_kind(properties)
+        aliases = [
+            value for value in [
+                properties.get("city"),
+                properties.get("town"),
+                properties.get("village"),
+                properties.get("state"),
+                properties.get("country"),
+                properties.get("postcode"),
+            ]
+            if value and value != name
+        ]
+        places.append({
+            "name": name,
+            "city": city or country or "OpenStreetMap",
+            "country": country,
+            "latitude": float(coordinates[1]),
+            "longitude": float(coordinates[0]),
+            "aliases": aliases,
+            "kind": kind,
+            "source": "photon_osm",
+            "osm_id": properties.get("osm_id"),
+            "osm_type": properties.get("osm_type"),
+        })
+    return places
 
 
 def extract_destination(query: str, routes: list[dict[str, Any]], explicit_destination: str = "") -> str:
     if explicit_destination.strip():
         return explicit_destination.strip()
     normalized = normalize_text(query)
+    for pattern in DESTINATION_PATTERNS:
+        match = re.search(pattern, normalized)
+        if match:
+            candidate = _clean_destination(match.group(1))
+            if candidate:
+                return candidate
     places = build_place_index(routes)
     matched_place = _best_place_text_match(normalized, places)
     if matched_place:
         return matched_place["name"]
-    for pattern in DESTINATION_PATTERNS:
+    return ""
+
+
+def extract_origin(query: str, explicit_origin: str = "") -> str:
+    if explicit_origin.strip() and normalize_text(explicit_origin) not in {"current location", "my location", "here"}:
+        return explicit_origin.strip()
+    normalized = normalize_text(query)
+    for pattern in ORIGIN_PATTERNS:
         match = re.search(pattern, normalized)
         if match:
-            return _clean_destination(match.group(1))
-    return ""
+            return _clean_place_phrase(match.group(1))
+    return explicit_origin.strip()
 
 
 def resolve_place(
@@ -381,7 +621,8 @@ def find_transit_suggestions(
 ) -> dict[str, Any]:
     language = detect_language(query or destination_text)
     extracted_destination = extract_destination(query, routes, destination_text)
-    origin = resolve_place(origin_text, routes, origin_latitude, origin_longitude, "Current location")
+    extracted_origin = extract_origin(query, origin_text)
+    origin = resolve_place(extracted_origin, routes, origin_latitude, origin_longitude, "Current location")
     destination = resolve_place(extracted_destination, routes, destination_latitude, destination_longitude, extracted_destination or "Destination")
 
     if destination is None and selected_route:
@@ -425,9 +666,9 @@ def find_matching_routes(
         destination_near = alight["distance_meters"] <= RELAXED_RADIUS_METERS
         route_text = normalize_text(f"{route.get('route', '')} {route.get('name', '')} {' '.join(route.get('landmarks', []))}")
         destination_text = normalize_text(destination.get("name", ""))
-        text_match = bool(destination_text and destination_text in route_text)
+        text_match = _destination_mentions_route(destination, route_text)
         if strict or destination_near or text_match:
-            score = board["distance_meters"] + alight["distance_meters"] + (0 if strict else 900)
+            score = board["distance_meters"] + alight["distance_meters"] + (0 if strict else 900) - (5000 if text_match else 0)
             matches.append({
                 "route": route.get("route"),
                 "route_name": route.get("name"),
@@ -471,7 +712,7 @@ def estimate_fare(points: list[dict[str, Any]], board_index: int, alight_index: 
     for left, right in zip(points[start:end], points[start + 1:end + 1]):
         distance += haversine_meters(left["latitude"], left["longitude"], right["latitude"], right["longitude"])
     km = distance / 1000.0
-    return int(round(max(13.0, 13.0 + max(0.0, km - 4.0) * 1.8)))
+    return int(round(max(13.0, 13.0 + max(0.0, km - 4.0) * 2.25)))
 
 
 def format_suggestion_answer(
@@ -513,6 +754,11 @@ def format_suggestion_answer(
             return f"Adda dagiti ruta nga asideg iti {destination['name']} ({route_names}), ngem awan pay active nga PUV ita."
         return f"I found matching routes near {destination['name']} ({route_names}), but no active PUVs are reporting on them right now."
     best = suggestions[0]
+    crowd_note = ""
+    if best.get("tier") in {"red", "blinking_red"}:
+        crowd_note = " This PUV is crowded; wait for a green or yellow option if you can."
+    elif len(suggestions) > 1:
+        crowd_note = f" Next option: {suggestions[1]['vehicle_id']} on Route {suggestions[1]['route']}."
     if language == "tl":
         return (
             f"Pinakamagandang sakyan: Ruta {best['route']} ({best['route_name']}), PUV {best['vehicle_id']}. "
@@ -542,10 +788,13 @@ def format_suggestion_answer(
             f"Karkulo a bayad: PHP {best['fare_pesos']}."
         )
     base = (
-        f"Best option: Route {best['route']} ({best['route_name']}), Vehicle {best['vehicle_id']}. "
-        f"Board near {best['boarding_stop']['name']} and alight near {best['alighting_stop']['name']}. "
-        f"It is about {best['distance_km']:.1f} km from you, arriving in ~{best['eta_minutes']:.0f} minutes. "
-        f"Estimated fare: PHP {best['fare_pesos']}."
+        f"Destination: {destination['name']}\n"
+        f"Recommended route: {best['route']} - {best['route_name']}\n"
+        f"PUV to board: {best['vehicle_id']} ({best.get('tier', 'active').replace('_', ' ')})\n"
+        f"Board near: {best['boarding_stop']['name']}\n"
+        f"Alight near: {best['alighting_stop']['name']}\n"
+        f"Arrival: ~{best['eta_minutes']:.0f} min ({best['distance_km']:.1f} km from you)\n"
+        f"Estimated fare: PHP {best['fare_pesos']}.{crowd_note}"
     )
     return base
 
@@ -644,8 +893,9 @@ def _rank_vehicles_for_matches(
                 "alighting_stop": match["alighting_stop"],
                 "walking_distance_meters": match["walking_distance_meters"],
                 "destination_walk_meters": match["destination_walk_meters"],
+                "match_score": match["score"],
             })
-    suggestions.sort(key=lambda item: (item["eta_minutes"], _tier_penalty(item.get("tier")), item["distance_km"]))
+    suggestions.sort(key=lambda item: (item["match_score"], _tier_penalty(item.get("tier")), item["eta_minutes"], item["distance_km"]))
     return suggestions[:limit]
 
 
@@ -682,8 +932,10 @@ def _nearest_point(target: Optional[dict[str, Any]], points: list[dict[str, Any]
             best = point
     if best is None:
         return None
+    index = best.get("index", best.get("stop_id", points.index(best)))
     return {
         **best,
+        "index": int(index),
         "distance_meters": round(best_distance, 1),
     }
 
@@ -696,26 +948,119 @@ def _best_place_text_match(normalized_query: str, places: list[dict[str, Any]]) 
         aliases = [place["name"], *(place.get("aliases") or [])]
         for alias in aliases:
             normalized_alias = normalize_text(alias)
-            if not normalized_alias:
-                continue
-            score = 0
-            if normalized_alias == normalized_query:
-                score = 200 + len(normalized_alias)
-            elif normalized_alias in normalized_query:
-                score = 150 + len(normalized_alias)
-            elif normalized_query in normalized_alias:
-                score = 80 + len(normalized_query)
-            elif all(token in normalized_alias for token in normalized_query.split()):
-                score = 60 + len(normalized_query)
+            score = _text_match_score(normalized_query, normalized_alias)
+            if score:
+                score += _place_kind_boost(place, normalized_query)
             if score > best[0]:
                 best = (score, place)
     return best[1]
 
 
+def _text_match_score(needle: str, haystack: str) -> int:
+    if not needle or not haystack:
+        return 0
+    if haystack == needle:
+        return 220 + len(haystack)
+    if haystack in needle:
+        return 165 + len(haystack)
+    if needle in haystack:
+        return 110 + len(needle)
+    tokens = needle.split()
+    if tokens and all(token in haystack for token in tokens):
+        return 85 + len(needle)
+    compact_needle = needle.replace(" ", "")
+    compact_haystack = haystack.replace(" ", "")
+    if compact_needle and compact_needle in compact_haystack:
+        return 75 + len(compact_needle)
+    return 0
+
+
+def _place_kind_boost(place: dict[str, Any], needle: str = "") -> int:
+    kind = place.get("kind", "")
+    route_like = bool(re.fullmatch(r"(route\s+)?[a-z0-9]{1,4}", needle or ""))
+    boosts = {
+        "city": 70,
+        "town": 68,
+        "barangay": 66,
+        "terminal": 58,
+        "landmark": 54,
+        "place": 48,
+        "stop": 14,
+        "route": 38 if route_like else -45,
+    }
+    return boosts.get(kind, 0)
+
+
+def _photon_kind(properties: dict[str, Any]) -> str:
+    osm_key = str(properties.get("osm_key") or "").lower()
+    osm_value = str(properties.get("osm_value") or "").lower()
+    place = str(properties.get("type") or "").lower()
+    if osm_key == "place":
+        if osm_value in {"city", "municipality"}:
+            return "city"
+        if osm_value in {"town", "village", "hamlet", "borough", "suburb", "quarter", "neighbourhood"}:
+            return "town" if osm_value in {"town", "village", "municipality"} else "barangay"
+    if osm_key in {"amenity", "shop", "tourism", "leisure", "historic"}:
+        return "landmark"
+    if osm_key in {"railway", "public_transport"} or osm_value in {"bus_station", "station", "terminal"}:
+        return "terminal"
+    if place in {"city", "town", "village"}:
+        return "city" if place == "city" else "town"
+    return "place"
+
+
+def _place_sort_key(place: dict[str, Any]) -> tuple[int, str, str]:
+    order = {
+        "city": 0,
+        "town": 1,
+        "barangay": 2,
+        "terminal": 3,
+        "landmark": 4,
+        "place": 5,
+        "stop": 6,
+        "route": 7,
+    }
+    return (order.get(place.get("kind", ""), 9), place.get("city", ""), place.get("name", ""))
+
+
 def _clean_destination(value: str) -> str:
-    value = re.sub(r"\b(from here|right now|please|pls|po|lang|diri|dito|gikan diri)\b", " ", value)
-    value = re.sub(r"\s+", " ", value).strip(" ?.,")
+    value = re.sub(r"\b(this destination|my destination|destination|from here|right now|please|pls|po|lang|diri|dito|gikan diri)\b", " ", value)
+    value = re.sub(r"\b(my current location is|current location is|from|gikan|origin is|starting from)\s+.+?\b(?:what|which|how|to reach|reach|going to)\b", " ", value)
+    value = re.sub(r"\b(which|what|how)\s+.*$", " ", value)
+    value = re.sub(r"^(reach|get to|go to|towards?|to)\s+", " ", value)
+    value = _clean_place_phrase(value)
     return value.title() if value else ""
+
+
+def _clean_place_phrase(value: str) -> str:
+    value = re.sub(r"\b(is at|is|at|sa)\b", " ", value)
+    value = re.sub(r"\s+", " ", value).strip(" ?.,")
+    return value
+
+
+def _route_center(points: list[dict[str, Any]]) -> Optional[dict[str, float]]:
+    valid = [point for point in points if _valid_coord(point)]
+    if not valid:
+        return None
+    return {
+        "latitude": sum(float(point["latitude"]) for point in valid) / len(valid),
+        "longitude": sum(float(point["longitude"]) for point in valid) / len(valid),
+    }
+
+
+def _destination_mentions_route(destination: dict[str, Any], route_text: str) -> bool:
+    terms = [destination.get("name", ""), *(destination.get("aliases") or [])]
+    normalized_terms = [normalize_text(term) for term in terms if normalize_text(term)]
+    if any(term and term in route_text for term in normalized_terms):
+        return True
+    ignored = {"cebu", "city", "philippines", "current", "location"}
+    tokens = {
+        token
+        for term in normalized_terms
+        for token in term.split()
+        if len(token) >= 4 and token not in ignored
+    }
+    return any(token in route_text for token in tokens)
 
 
 def _valid_coord(point: Any) -> bool:
@@ -794,6 +1139,23 @@ def _translate(language: str, english: str) -> str:
             "Route": "Ruta",
             "Vehicle": "PUV",
             "Estimated fare": "Karkulo a bayad",
+        }
+    elif language == "es":
+        replacements = {
+            "Best option": "Mejor opcion",
+            "Route": "Ruta",
+            "Vehicle": "Vehiculo",
+            "Board near": "Sube cerca de",
+            "and alight near": "y baja cerca de",
+            "Estimated fare": "Tarifa estimada",
+            "Please tell me your destination so I can search every route.": "Dime tu destino para buscar todas las rutas.",
+        }
+    elif language == "ja":
+        replacements = {
+            "Best option": "Best option",
+            "Route": "Route",
+            "Vehicle": "Vehicle",
+            "Estimated fare": "Estimated fare",
         }
     else:
         replacements = {}

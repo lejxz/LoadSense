@@ -12,7 +12,7 @@ from backend.app.db import sqlite_store
 
 
 class SyntheticFleetSimulator:
-    def __init__(self, fleet_store: Any, vehicles_per_route: int = 6, interval_seconds: float = 3.0) -> None:
+    def __init__(self, fleet_store: Any, vehicles_per_route: int = 8, interval_seconds: float = 3.0) -> None:
         self.fleet_store = fleet_store
         self.vehicles_per_route = vehicles_per_route
         self.interval_seconds = interval_seconds

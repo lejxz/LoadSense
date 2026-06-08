@@ -67,6 +67,15 @@ def main():
     print("/api/alerts create", response.status_code)
     if response.status_code != 200:
         raise SystemExit(response.text)
+    alert_id = response.json()["alert"]["id"]
+
+    response = client.post(
+        f"/api/alerts/{alert_id}/verify",
+        json={"action": "false_alarm", "note": "smoke verification note"},
+    )
+    print("/api/alerts verify", response.status_code)
+    if response.status_code != 200 or response.json()["verification_status"] != "false_alarm":
+        raise SystemExit(response.text)
 
     geojson = {
         "type": "FeatureCollection",
