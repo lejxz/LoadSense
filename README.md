@@ -91,4 +91,4 @@ The API smoke check uses FastAPI `TestClient` across telemetry, fleet, alerts, d
 
 ## Documentation
 
-Start with [docs/REQUIREMENTS_COVERAGE.md](docs/REQUIREMENTS_COVERAGE.md), then follow [RUN_DEMO.md](RUN_DEMO.md) for the demo script.
+Start with [RUN_DEMO.md](RUN_DEMO.md) for the live demo script, [docs/REQUIREMENTS_COVERAGE.md](docs/REQUIREMENTS_COVERAGE.md) for implementation status, and [docs/DATA_SOURCES_AND_APIS.md](docs/DATA_SOURCES_AND_APIS.md) for dataset/API citations and license links.
