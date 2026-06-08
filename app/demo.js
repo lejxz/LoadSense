@@ -1357,16 +1357,18 @@
     document.querySelectorAll('[data-route-preview]').forEach(btn => btn.addEventListener('click', e => {
       previewRoute(btn.dataset.routePreview, 'routePreviewMap');
     }));
-    document.querySelectorAll('[data-route]').forEach(btn => {
-      if (btn.classList.contains('delete-route') || btn.textContent.trim().toLowerCase()==='delete') {
-        btn.addEventListener('click', async () => {
-          const route = btn.dataset.route;
-          if (!confirm(`Delete route ${route}?`)) return;
-          await fetch(api + `/routes/${route}`, { method: 'DELETE' });
-          await refreshData();
-          renderOperator();
-        });
-      }
+    document.querySelectorAll('.delete-route').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const route = btn.dataset.route;
+        if (!confirm(`Delete route ${route}?`)) return;
+        const response = await fetch(api + `/routes/${route}`, { method: 'DELETE' });
+        if (!response.ok) {
+          alert(await response.text());
+          return;
+        }
+        await refreshData();
+        renderOperator();
+      });
     });
   }
 
@@ -1416,20 +1418,32 @@
         a.href = url; a.download = 'routes.json'; document.body.appendChild(a); a.click(); a.remove();
       });
     }
+    async function importPastedRoutes() {
+      try {
+        const json = JSON.parse(importArea.value);
+        if (!Array.isArray(json)) throw new Error('Expected array');
+        for (const r of json) {
+          const poly = (r.polyline || []).map(p => Array.isArray(p) ? p : [p.latitude, p.longitude]);
+          const response = await fetch(api + '/routes?replace=true', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ route: r.route, name: r.name, polyline: poly }) });
+          if (!response.ok) throw new Error(await response.text());
+        }
+        await refreshData();
+        renderOperator();
+        showToast(`Imported ${json.length} route${json.length === 1 ? '' : 's'}.`);
+      } catch (e) {
+        alert('Invalid JSON: ' + e.message);
+      }
+    }
     if (importBtn && importArea) {
       importBtn.addEventListener('click', () => {
+        if (importArea.style.display !== 'none' && importArea.value.trim()) {
+          importPastedRoutes();
+          return;
+        }
         importArea.style.display = importArea.style.display === 'none' ? 'block' : 'none';
       });
       importArea.addEventListener('change', async () => {
-        try {
-          const json = JSON.parse(importArea.value);
-          if (!Array.isArray(json)) throw new Error('Expected array');
-          for (const r of json) {
-            const poly = (r.polyline || []).map(p => Array.isArray(p) ? p : [p.latitude, p.longitude]);
-            await fetch(api + '/routes?replace=true', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ route: r.route, name: r.name, polyline: poly }) });
-          }
-          await refreshData(); renderOperator();
-        } catch (e) { alert('Invalid JSON: ' + e.message); }
+        if (importArea.value.trim()) await importPastedRoutes();
       });
     }
     async function uploadRouteFile(commit) {
