@@ -7,10 +7,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="css/variables.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/components.css" />
+    <link rel="stylesheet" href="css/map.css" />
+    <link rel="stylesheet" href="css/mobile.css" />
+    <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.css" />
+    <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.Default.css" />
   </head>
   <body class="mobile-page">
     <main class="phone-frame" aria-label="LoadSense commuter mobile app">
@@ -34,22 +38,22 @@
       <section id="appScreen" class="app-screen hidden">
         <header class="mobile-header">
           <div>
-            <p class="eyebrow">Good morning</p>
-            <h1 id="mobileRouteTitle">Route 04L</h1>
+            <p class="eyebrow" style="margin: 0; padding: 0;">Good day: LoadSense</p>
           </div>
         </header>
+
 
         <section id="tripSearchPanel" class="trip-search-panel" aria-label="Find a PUV">
           <div class="trip-fields">
             <label>
-              Current Location
-              <input id="originInput" autocomplete="off" value="Current Location" placeholder="Current Location, Minglanilla, 44A" />
+              Origin
+              <input id="originInput" autocomplete="off" value="" placeholder="Current Location" />
               <div id="originSearchResults" class="place-search-results hidden"></div>
             </label>
             <button id="swapTrip" class="mini-action swap-trip" type="button" title="Swap origin and destination">Swap</button>
             <label>
               Destination
-              <input id="destinationInput" autocomplete="off" placeholder="Search route, stop, landmark, city" />
+              <input id="destinationInput" autocomplete="off" placeholder="Search stop, landmark, city" />
               <div id="destinationSearchResults" class="place-search-results hidden"></div>
             </label>
           </div>
@@ -62,7 +66,9 @@
             <div class="home-top">
               <h2 id="bestVehicleTitle">Waiting for telemetry</h2>
             </div>
-            <p id="bestVehicleBody">Live demo vehicles are simulated by the Python backend and loop through Cebu routes.</p>
+            <div id="bestVehicleBody" class="best-vehicle-details">
+              <p>Live demo vehicles are simulated by the Python backend and loop through Cebu routes.</p>
+            </div>
             <div id="ledPill" class="occupancy-pill neutral">No LED signal</div>
           </div>
           <div class="quick-grid">
@@ -87,12 +93,30 @@
         </section>
 
         <section class="tab-panel" id="mapTab">
-          <div class="section-head">
+          <div class="section-head map-section-head">
             <div>
               <p class="eyebrow">Live route map</p>
-              <h2>PUVs near your corridor</h2>
+              <h2>Find a PUV</h2>
             </div>
-            <select id="mapRoute"></select>
+            <div class="trip-fields map-trip-fields">
+              <label>
+                Origin
+                <input id="mapOriginInput" autocomplete="off" value="" placeholder="Current Location" />
+                <div id="mapOriginSearchResults" class="place-search-results hidden"></div>
+              </label>
+              <label>
+                Destination
+                <input id="mapDestinationInput" autocomplete="off" placeholder="Search stop, landmark, city" />
+                <div id="mapDestinationSearchResults" class="place-search-results hidden"></div>
+              </label>
+            </div>
+            <button id="mapFindPuvBtn" class="button primary full-width-action" type="button">Show Route</button>
+            <div class="manual-route-browse">
+              <label class="manual-route-label">
+                <span class="eyebrow muted-eyebrow">Browse manually</span>
+                <select id="mapRoute"></select>
+              </label>
+            </div>
           </div>
           <div id="mobileMap" class="live-map"></div>
           <div id="destinationConfirm" class="destination-confirm hidden"></div>
@@ -105,15 +129,13 @@
 
         <section class="tab-panel" id="routesTab">
           <div class="route-directory-sheet">
-            <div class="sheet-handle" aria-hidden="true"></div>
             <div class="section-head">
               <div>
-                <p class="eyebrow">Route directory</p>
-                <h2>Near me</h2>
+                <h2>ROUTE DIRECTORY</h2>
               </div>
             </div>
             <div class="route-directory-controls">
-              <input id="routeSearch" class="route-search" placeholder="Search route, city, landmark" />
+              <input id="routeSearch" class="route-search" placeholder="Search route" />
               <select id="cityFilter"></select>
             </div>
             <div id="routeList" class="route-list"></div>
@@ -143,9 +165,17 @@
         </nav>
       </section>
     </main>
-    <script src="demo.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="vendor/leaflet/leaflet.js"></script>
+    <script src="vendor/leaflet/leaflet.markercluster.js"></script>
+    <script src="js/core.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/places.js"></script>
+    <script src="js/mobile.js"></script>
+    <script src="js/operator.js"></script>
+    <script src="js/routes-admin.js"></script>
+    <script src="js/alerts.js"></script>
+    <script src="js/main.js"></script>
     <script>
       window.LoadSense.initMobile();
     </script>
