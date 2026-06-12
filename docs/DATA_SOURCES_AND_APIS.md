@@ -46,4 +46,4 @@ This file records the datasets, generated data, APIs, and license links used or 
 
 - Validation scripts under `tests/`, including health, API smoke, demo-state, and chatbot regression checks; project-created validation scripts.
 
-- Browser UI files under `app/`, including `index.html`, `mobile.html`, `operator.html`, `demo.js`, and `styles.css`; project-created frontend files, with external font loading as noted above.
+- Browser UI files under `app/`, including `index.html`, `mobile.html`, `operator.html`, `js/`, and `styles.css`; project-created frontend files, with external font loading as noted above.

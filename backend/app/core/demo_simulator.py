@@ -61,15 +61,35 @@ class SyntheticFleetSimulator:
             self._stop.wait(self.interval_seconds)
 
 
+def _get_segment(points: list[dict[str, float]], ratio: float) -> tuple[dict[str, float], dict[str, float], float]:
+    if len(points) <= 1:
+        return points[0], points[0], 0.0
+
+    dists = [0.0]
+    for i in range(1, len(points)):
+        p1 = points[i - 1]
+        p2 = points[i]
+        dx = float(p2["longitude"]) - float(p1["longitude"])
+        dy = float(p2["latitude"]) - float(p1["latitude"])
+        dist = math.hypot(dx, dy)
+        dists.append(dists[-1] + dist)
+
+    total_dist = dists[-1]
+    if total_dist == 0:
+        return points[0], points[0], 0.0
+
+    target_dist = total_dist * ratio
+    for i in range(1, len(dists)):
+        if dists[i] >= target_dist:
+            segment_dist = dists[i] - dists[i - 1]
+            blend = 0.0 if segment_dist == 0 else (target_dist - dists[i - 1]) / segment_dist
+            return points[i - 1], points[i], blend
+
+    return points[-2], points[-1], 1.0
+
+
 def _point_at(points: list[dict[str, float]], ratio: float) -> tuple[float, float]:
-    if len(points) == 1:
-        return float(points[0]["latitude"]), float(points[0]["longitude"])
-    scaled = ratio * (len(points) - 1)
-    left = int(math.floor(scaled))
-    right = min(len(points) - 1, left + 1)
-    blend = scaled - left
-    a = points[left]
-    b = points[right]
+    a, b, blend = _get_segment(points, ratio)
     lat = float(a["latitude"]) + (float(b["latitude"]) - float(a["latitude"])) * blend
     lon = float(a["longitude"]) + (float(b["longitude"]) - float(a["longitude"])) * blend
     return lat, lon
@@ -94,13 +114,9 @@ def _status_for(tick: int, occupancy: int, route_index: int, vehicle_index: int)
 def _heading_at(points: list[dict[str, float]], ratio: float, direction: str) -> float | None:
     if len(points) < 2:
         return None
-    scaled = ratio * (len(points) - 1)
-    left = int(math.floor(scaled))
-    right = min(len(points) - 1, left + 1)
+    a, b, _ = _get_segment(points, ratio)
     if direction == "backward":
-        left, right = right, left
-    a = points[left]
-    b = points[right]
+        a, b = b, a
     lat1 = math.radians(float(a["latitude"]))
     lat2 = math.radians(float(b["latitude"]))
     d_lon = math.radians(float(b["longitude"]) - float(a["longitude"]))

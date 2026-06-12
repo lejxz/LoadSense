@@ -9,7 +9,7 @@ The actual PDF could not be text-extracted in this environment because no local 
 | Demo | Files | Purpose |
 |---|---|---|
 | Edge counting demo | `edge/line_crossing_counter.py`, `data/edge_line_crossing_counts.csv` | Simulates overhead camera line crossing, occupancy tiers, LED state, and zone density evidence. |
-| Interface demo | `app/index.html`, `app/mobile.html`, `app/operator.html`, `app/demo.js`, `app/styles.css` | Shows commuter and operator experiences that consume backend telemetry. |
+| Interface demo | `app/index.html`, `app/mobile.html`, `app/operator.html`, `app/js/`, `app/styles.css` | Shows commuter and operator experiences that consume backend telemetry. |
 | Backend/cloud demo | `backend/`, `cloud/`, `data/loadsense_demo.sqlite` | Processes telemetry, predicts ETA, checks safety, persists history, and serves APIs. |
 
 ## Architecture Diagram Coverage

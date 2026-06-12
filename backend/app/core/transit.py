@@ -629,6 +629,9 @@ def find_transit_suggestions(
         return _selected_route_fallback(routes, vehicles, selected_route, query, language, limit)
 
     matches = find_matching_routes(origin, destination, routes)
+    if not matches and origin and destination:
+        matches = find_multi_leg_routes(origin, destination, routes)
+        
     suggestions = _rank_vehicles_for_matches(matches, vehicles, origin, limit)
     answer = format_suggestion_answer(language, origin, destination, suggestions, matches)
     return {
@@ -648,6 +651,12 @@ def find_matching_routes(
 ) -> list[dict[str, Any]]:
     if destination is None:
         return []
+        
+    if origin and destination:
+        dist_od = haversine_meters(origin["latitude"], origin["longitude"], destination["latitude"], destination["longitude"])
+        if dist_od > 100000:
+            return []
+            
     matches: list[dict[str, Any]] = []
     for route in routes:
         points = route_points(route, prefer_stops=True)
@@ -658,32 +667,115 @@ def find_matching_routes(
         if not alight:
             continue
         board = board or _nearest_point(points[0], points)
+        
+        if board["distance_meters"] > RELAXED_RADIUS_METERS or alight["distance_meters"] > RELAXED_RADIUS_METERS:
+            continue
+            
         direction = "forward" if board["index"] <= alight["index"] else "backward"
         strict = (
             board["distance_meters"] <= WALKING_RADIUS_METERS
             and alight["distance_meters"] <= WALKING_RADIUS_METERS
         )
-        destination_near = alight["distance_meters"] <= RELAXED_RADIUS_METERS
-        route_text = normalize_text(f"{route.get('route', '')} {route.get('name', '')} {' '.join(route.get('landmarks', []))}")
-        destination_text = normalize_text(destination.get("name", ""))
-        text_match = _destination_mentions_route(destination, route_text)
-        if strict or destination_near or text_match:
-            score = board["distance_meters"] + alight["distance_meters"] + (0 if strict else 900) - (5000 if text_match else 0)
-            matches.append({
-                "route": route.get("route"),
-                "route_name": route.get("name"),
-                "city": route.get("city") or infer_city(route.get("polyline", []), route.get("name", "")),
-                "zone": route.get("zone", ""),
-                "direction": direction,
-                "strict": strict,
-                "score": round(score, 1),
-                "boarding_stop": board,
-                "alighting_stop": alight,
-                "walking_distance_meters": round(board["distance_meters"], 0),
-                "destination_walk_meters": round(alight["distance_meters"], 0),
-                "fare_pesos": estimate_fare(points, board["index"], alight["index"]),
-            })
+        
+        score = board["distance_meters"] + alight["distance_meters"] + (0 if strict else 1000)
+        matches.append({
+            "route": route.get("route"),
+            "route_name": route.get("name"),
+            "city": route.get("city") or infer_city(route.get("polyline", []), route.get("name", "")),
+            "zone": route.get("zone", ""),
+            "direction": direction,
+            "strict": strict,
+            "score": round(score, 1),
+            "boarding_stop": board,
+            "alighting_stop": alight,
+            "walking_distance_meters": round(board["distance_meters"], 0),
+            "destination_walk_meters": round(alight["distance_meters"], 0),
+            "fare_pesos": estimate_fare(points, board["index"], alight["index"]),
+        })
     matches.sort(key=lambda item: (not item["strict"], item["score"], item["route_name"] or ""))
+    return matches[:12]
+
+def find_multi_leg_routes(
+    origin: Optional[dict[str, Any]],
+    destination: Optional[dict[str, Any]],
+    routes: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not origin or not destination:
+        return []
+    
+    leg1_candidates = []
+    leg2_candidates = []
+    
+    for route in routes:
+        points = route_points(route, prefer_stops=True)
+        if len(points) < 2:
+            continue
+            
+        board = _nearest_point(origin, points)
+        if board and board["distance_meters"] <= RELAXED_RADIUS_METERS:
+            leg1_candidates.append((route, points, board))
+            
+        alight = _nearest_point(destination, points)
+        if alight and alight["distance_meters"] <= RELAXED_RADIUS_METERS:
+            leg2_candidates.append((route, points, alight))
+            
+    matches = []
+    
+    for r1, pts1, board1 in leg1_candidates:
+        for r2, pts2, alight2 in leg2_candidates:
+            if r1.get("route") == r2.get("route"):
+                continue
+                
+            best_transfer = None
+            best_transfer_dist = float('inf')
+            
+            for p1 in pts1:
+                for p2 in pts2:
+                    dist = haversine_meters(p1["latitude"], p1["longitude"], p2["latitude"], p2["longitude"])
+                    if dist < 500 and dist < best_transfer_dist:
+                        best_transfer_dist = dist
+                        best_transfer = (p1, p2)
+                        
+            if best_transfer:
+                p1, p2 = best_transfer
+                direction1 = "forward" if board1["index"] <= p1["index"] else "backward"
+                direction2 = "forward" if p2["index"] <= alight2["index"] else "backward"
+                
+                score = board1["distance_meters"] + alight2["distance_meters"] + best_transfer_dist + 2000
+                matches.append({
+                    "legs": [
+                        {
+                            "route": r1.get("route"),
+                            "route_name": r1.get("name"),
+                            "direction": direction1,
+                            "boarding_stop": board1,
+                            "alighting_stop": p1,
+                        },
+                        {
+                            "route": r2.get("route"),
+                            "route_name": r2.get("name"),
+                            "direction": direction2,
+                            "boarding_stop": p2,
+                            "alighting_stop": alight2,
+                        }
+                    ],
+                    "route": f"{r1.get('route')} to {r2.get('route')}",
+                    "route_name": f"Transfer at {p1['name']}",
+                    "city": r1.get("city") or infer_city(r1.get("polyline", []), r1.get("name", "")),
+                    "zone": r1.get("zone", ""),
+                    "direction": "multi",
+                    "strict": False,
+                    "score": round(score, 1),
+                    "boarding_stop": board1,
+                    "alighting_stop": alight2,
+                    "transfer_stop": p1,
+                    "walking_distance_meters": round(board1["distance_meters"], 0),
+                    "destination_walk_meters": round(alight2["distance_meters"], 0),
+                    "transfer_walk_meters": round(best_transfer_dist, 0),
+                    "fare_pesos": estimate_fare(pts1, board1["index"], p1["index"]) + estimate_fare(pts2, p2["index"], alight2["index"]),
+                })
+                
+    matches.sort(key=lambda item: item["score"])
     return matches[:12]
 
 
@@ -853,19 +945,51 @@ def _rank_vehicles_for_matches(
 ) -> list[dict[str, Any]]:
     suggestions = []
     for match in matches:
+        route_id = match["legs"][0]["route"] if "legs" in match else match["route"]
+        boarding_stop = match["legs"][0]["boarding_stop"] if "legs" in match else match["boarding_stop"]
+        alighting_stop = match["legs"][-1]["alighting_stop"] if "legs" in match else match["alighting_stop"]
+        
         route_vehicles = [
             vehicle for vehicle in vehicles
-            if vehicle.get("route") == match["route"] and vehicle.get("status", "active") != "idle"
+            if vehicle.get("route") == route_id and vehicle.get("status", "active") != "idle"
         ]
         strict_vehicles = [
             vehicle for vehicle in route_vehicles
             if _vehicle_can_reach_boarding_stop(vehicle, match)
         ]
         candidates = strict_vehicles or route_vehicles
+        
+        if not candidates and "legs" in match:
+            # If multi-leg and no vehicles, still suggest the route itself
+            suggestions.append({
+                "vehicle_id": "Any PUV",
+                "route": match["route"],
+                "route_name": match["route_name"],
+                "city": match["city"],
+                "zone": match["zone"],
+                "eta_minutes": 0,
+                "distance_meters": 0,
+                "distance_km": 0.0,
+                "fare_pesos": match["fare_pesos"],
+                "occupancy": 0,
+                "capacity": 0,
+                "tier": "active",
+                "status": "active",
+                "direction": match["direction"],
+                "speed_kph": DEFAULT_SPEED_KPH,
+                "boarding_stop": boarding_stop,
+                "alighting_stop": alighting_stop,
+                "walking_distance_meters": match["walking_distance_meters"],
+                "destination_walk_meters": match["destination_walk_meters"],
+                "match_score": match["score"],
+                "legs": match.get("legs"),
+            })
+            continue
+
         for vehicle in candidates:
             if not _valid_coord(vehicle):
                 continue
-            target = origin or match["boarding_stop"]
+            target = origin or boarding_stop
             distance = haversine_meters(
                 float(vehicle["latitude"]),
                 float(vehicle["longitude"]),
@@ -889,11 +1013,12 @@ def _rank_vehicles_for_matches(
                 "status": vehicle.get("status", "active"),
                 "direction": vehicle.get("direction"),
                 "speed_kph": vehicle.get("speed_kph") or DEFAULT_SPEED_KPH,
-                "boarding_stop": match["boarding_stop"],
-                "alighting_stop": match["alighting_stop"],
+                "boarding_stop": boarding_stop,
+                "alighting_stop": alighting_stop,
                 "walking_distance_meters": match["walking_distance_meters"],
                 "destination_walk_meters": match["destination_walk_meters"],
                 "match_score": match["score"],
+                "legs": match.get("legs"),
             })
     suggestions.sort(key=lambda item: (item["match_score"], _tier_penalty(item.get("tier")), item["eta_minutes"], item["distance_km"]))
     return suggestions[:limit]
@@ -903,13 +1028,17 @@ def _vehicle_can_reach_boarding_stop(vehicle: dict[str, Any], match: dict[str, A
     direction = vehicle.get("direction")
     if direction not in {"forward", "backward"}:
         return True
-    route_points_for_vehicle = ROUTE_METADATA.get(match["route"], {}).get("stops")
+        
+    route_id = match["legs"][0]["route"] if "legs" in match else match["route"]
+    boarding_stop = match["legs"][0]["boarding_stop"] if "legs" in match else match["boarding_stop"]
+    
+    route_points_for_vehicle = ROUTE_METADATA.get(route_id, {}).get("stops")
     if not route_points_for_vehicle:
         return True
     vehicle_point = _nearest_point(vehicle, route_points_for_vehicle)
     if not vehicle_point:
         return True
-    board_index = match["boarding_stop"]["index"]
+    board_index = boarding_stop.get("index", 0)
     if direction == "forward":
         return vehicle_point["index"] <= board_index
     return vehicle_point["index"] >= board_index

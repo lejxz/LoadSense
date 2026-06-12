@@ -7,10 +7,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&family=Sora:wght@600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <link rel="stylesheet" href="css/variables.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/components.css" />
+    <link rel="stylesheet" href="css/map.css" />
+    <link rel="stylesheet" href="css/operator.css" />
+    <link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+    <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.css" />
+    <link rel="stylesheet" href="vendor/leaflet/MarkerCluster.Default.css" />
   </head>
   <body class="operator-page">
     <header class="operator-header">
@@ -75,7 +79,7 @@
           </div>
         </div>
         <div id="routesAdmin" class="routes-admin">
-          <form id="routeForm" class="login-form">
+          <form id="routeForm" class="route-form">
             <label>
               Route ID
               <input id="routeId" />
@@ -86,14 +90,14 @@
             </label>
             <label>
               Polyline (lat,long per line)
-              <textarea id="routePolyline" rows="4" style="width:100%"></textarea>
+              <textarea id="routePolyline" rows="4"></textarea>
             </label>
-            <div style="display:flex;gap:8px">
+            <div class="route-form-actions">
               <button id="saveRoute" class="button primary" type="button">Save route</button>
               <button id="clearRoute" class="button secondary" type="button">Clear</button>
             </div>
           </form>
-          <div style="display:flex;gap:8px;margin-top:8px">
+          <div class="route-io-actions">
             <button id="exportRoutes" class="button secondary">Export routes (JSON)</button>
             <button id="importRoutesBtn" class="button">Import routes (JSON)</button>
           </div>
@@ -112,7 +116,7 @@
             </label>
             <div id="routeImportPreview" class="import-preview"></div>
           </div>
-          <textarea id="importRoutes" placeholder='Paste JSON array of routes here (route,name,polyline)' style="width:100%;height:110px;margin-top:8px;display:none"></textarea>
+          <textarea id="importRoutes" class="import-routes-textarea" placeholder='Paste JSON array of routes here (route,name,polyline)'></textarea>
           <div id="routePreviewPanel" class="route-preview-panel hidden">
             <div class="section-head">
               <div>
@@ -123,7 +127,7 @@
             <div id="routePreviewMap" class="live-map route-preview-map"></div>
             <p id="routePreviewMeta" class="muted"></p>
           </div>
-          <div id="routesTable" style="margin-top:12px"></div>
+          <div id="routesTable" class="routes-table"></div>
         </div>
       </section>
       </section>
@@ -201,9 +205,17 @@
       </section>
 
     </main>
-    <script src="demo.js"></script>
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="vendor/leaflet/leaflet.js"></script>
+    <script src="vendor/leaflet/leaflet.markercluster.js"></script>
+    <script src="js/core.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/places.js"></script>
+    <script src="js/mobile.js"></script>
+    <script src="js/operator.js"></script>
+    <script src="js/routes-admin.js"></script>
+    <script src="js/alerts.js"></script>
+    <script src="js/main.js"></script>
     <script>
       window.LoadSense.initOperator();
     </script>
