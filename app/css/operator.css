@@ -60,6 +60,12 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
 }
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
 .ops-metrics article, .ops-panel, .ops-map-panel {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -331,7 +337,7 @@
   margin-top: 12px;
 }
 .route-preview-map {
-  height: 320px;
+  height: 480px;
 }
 .route-form-actions,
 .route-io-actions {

@@ -160,6 +160,7 @@
             latitude: Number(button.dataset.lat),
             longitude: Number(button.dataset.lon),
           };
+          state.showTripPanel = false;
           if (typeof renderDestinationConfirm === 'function') renderDestinationConfirm();
           if (typeof renderMobile === 'function') renderMobile();
         }

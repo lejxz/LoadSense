@@ -11,9 +11,9 @@ function drawMap(containerId, routeFilter) {
     // initialize map if needed
     if (!state.maps[containerId]) {
       const map = L.map(containerId, { zoomControl: true, attributionControl: false }).setView([10.3157, 123.8854], 13);
-      // Tile layer definitions – Transport Map is the default
+      // Tile layer definitions – Transport is the default
       const TILE_LAYERS = {
-        'Transport Map': L.tileLayer('https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png', {
+        'Transport': L.tileLayer('https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png', {
           maxZoom: 19,
           attribution: '&copy; <a href="https://memomaps.de/">memomaps.de</a> CC-BY-SA, map data &copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }),
@@ -318,13 +318,20 @@ function drawMap(containerId, routeFilter) {
     if (!vehicle || !isMapCoordinate(vehicle)) return;
     state.selectedVehicleId = vehicleId;
     state.selectedRoute = vehicle.route;
-    if (state.maps.operatorMap && typeof activateOperatorTab === "function") activateOperatorTab("opsOverview");
-    if (state.maps.mobileMap && typeof activateMobileTab === "function") activateMobileTab("mapTab");
-    const targetMapId = state.maps.operatorMap ? "operatorMap" : "mobileMap";
-    drawMap(targetMapId, vehicle.route);
-    const map = state.maps.operatorMap || state.maps.mobileMap;
-    if (map) {
-      setTimeout(() => map.setView([Number(vehicle.latitude), Number(vehicle.longitude)], 17), 100);
+    
+    if (state.maps.mobileMap) {
+      if (typeof activateMobileTab === "function") activateMobileTab("mapTab");
+      drawMap("mobileMap", vehicle.route);
+      const map = state.maps.mobileMap;
+      if (map) {
+        setTimeout(() => map.setView([Number(vehicle.latitude), Number(vehicle.longitude)], 17), 100);
+      }
+    } else if (state.maps.operatorMap) {
+      if (typeof activateOperatorTab === "function") activateOperatorTab("opsOverview");
+      const map = state.maps.operatorMap;
+      if (map) {
+        setTimeout(() => map.setView([Number(vehicle.latitude), Number(vehicle.longitude)], 17), 100);
+      }
     }
   }
 
@@ -338,31 +345,51 @@ function drawMap(containerId, routeFilter) {
       L.DomEvent.disableScrollPropagation(wrap);
 
       // --- Layer dropdown (LEFT side) ---
-      const layerLabel = L.DomUtil.create("label", "map-controls-bar__layer-label", wrap);
-      layerLabel.setAttribute("aria-label", "Map type");
-      layerLabel.innerHTML = 'Map';
-      const select = L.DomUtil.create("select", "map-controls-bar__select", layerLabel);
-      select.id = `mapLayerSelect-${containerId}`;
-      select.setAttribute("aria-label", "Choose map type");
-      const layerOrder = ['Transport Map', 'Standard', 'CyclOSM'];
+      const dropdownWrap = L.DomUtil.create("div", "map-layer-dropdown", wrap);
+      const layerOrder = ['Transport', 'Standard', 'CyclOSM'];
+      
+      const toggle = L.DomUtil.create("div", "map-layer-toggle", dropdownWrap);
+      toggle.innerHTML = `Map <span class="map-layer-current">${defaultName}</span>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
+      
+      const menu = L.DomUtil.create("div", "map-layer-menu", dropdownWrap);
+      
       layerOrder.forEach(name => {
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name;
-        if (name === defaultName) option.selected = true;
-        select.appendChild(option);
+        const item = L.DomUtil.create("button", "map-layer-item", menu);
+        item.textContent = name;
+        if (name === defaultName) item.classList.add("active");
+        
+        L.DomEvent.on(item, "click", (e) => {
+          e.stopPropagation();
+          Array.from(menu.children).forEach(child => child.classList.remove("active"));
+          item.classList.add("active");
+          dropdownWrap.querySelector('.map-layer-current').textContent = name;
+          dropdownWrap.classList.remove("open");
+          
+          const current = state.mapActiveTile[containerId];
+          if (current) map.removeLayer(current);
+          const next = tileLayers[name];
+          next.addTo(map);
+          const featureLayer = state.mapLayers[containerId];
+          const clusterLayer = state.mapClusters[containerId];
+          if (featureLayer && featureLayer.bringToFront) featureLayer.bringToFront();
+          if (clusterLayer && clusterLayer.bringToFront) clusterLayer.bringToFront();
+          state.mapActiveTile[containerId] = next;
+        });
       });
-      L.DomEvent.on(select, "change", () => {
-        const chosen = select.value;
-        const current = state.mapActiveTile[containerId];
-        if (current) map.removeLayer(current);
-        const next = tileLayers[chosen];
-        next.addTo(map);
-        const featureLayer = state.mapLayers[containerId];
-        const clusterLayer = state.mapClusters[containerId];
-        if (featureLayer && featureLayer.bringToFront) featureLayer.bringToFront();
-        if (clusterLayer && clusterLayer.bringToFront) clusterLayer.bringToFront();
-        state.mapActiveTile[containerId] = next;
+
+      L.DomEvent.on(toggle, "click", (e) => {
+        e.stopPropagation();
+        dropdownWrap.classList.toggle("open");
+      });
+      
+      L.DomEvent.on(wrap, "click", (e) => {
+        if (!dropdownWrap.contains(e.target)) {
+          dropdownWrap.classList.remove("open");
+        }
+      });
+      document.addEventListener("click", () => {
+        dropdownWrap.classList.remove("open");
       });
 
       // --- Divider ---
@@ -379,7 +406,7 @@ function drawMap(containerId, routeFilter) {
       } else {
         locBtn.title = "Show my location";
         locBtn.setAttribute("aria-label", "Show my location");
-        locBtn.innerHTML = '🧍';
+        locBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>`;
       }
       L.DomEvent.on(locBtn, "click", () => {
         if (isOperator) {

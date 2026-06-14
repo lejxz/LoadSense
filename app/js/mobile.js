@@ -15,6 +15,7 @@
       body: JSON.stringify(buildTripPayload(query)),
     });
     syncTripResult(result);
+    state.showTripPanel = true;
     renderMobile();
     
     if (!state.tripSuggestions.length && typeof showToast === "function") {
@@ -198,7 +199,7 @@
   function renderDestinationConfirm() {
     const panel = qs("destinationConfirm");
     if (!panel) return;
-    if (!state.selectedDestination) {
+    if (!state.selectedDestination || !state.showTripPanel) {
       panel.classList.add("hidden");
       panel.innerHTML = "";
       return;
@@ -208,13 +209,16 @@
     const best = state.tripSuggestions[0] || state.vehicles.filter(v => v.route === state.selectedRoute).sort(vehicleSort)[0];
     panel.classList.remove("hidden");
     panel.innerHTML = `
-      <strong>Destination selected</strong>
+      <button id="closeDestinationConfirm" class="close-sheet-btn" aria-label="Close" type="button">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+      <strong>Search Results</strong>
       <code>${lat}, ${lon}</code>
-      <p>${state.tripMessage || (best ? `Suggested PUV ${escapeHtml(best.vehicle_id)} on Route ${escapeHtml(best.route)} - ETA ${escapeHtml(String(best.eta_minutes || 0))} min.` : "Enter a destination and tap Find PUV to search the full route set.")}</p>
-      <button id="suggestDestinationPuv" class="button primary" type="button">Find PUV</button>
+      <p>${state.tripMessage || (best ? `Suggested PUV ${escapeHtml(best.vehicle_id)} on Route ${escapeHtml(best.route)} - ETA ${escapeHtml(String(best.eta_minutes || 0))} min.` : "Unable to find a route.")}</p>
     `;
-    qs("suggestDestinationPuv").addEventListener("click", async () => {
-      await requestTripSuggestions(state.destinationInput || state.selectedDestination?.name || "");
+    qs("closeDestinationConfirm").addEventListener("click", () => {
+      state.showTripPanel = false;
+      renderMobile();
     });
   }
 
