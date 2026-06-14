@@ -16,10 +16,28 @@ from backend.app.core.transit import search_places
 from backend.app.db import sqlite_store
 from backend.app.core.state import fleet_store
 from backend.app.db.models import OperatorAlert as OperatorAlertModel
+from backend.app.db.models import RoutePoint, Vehicle as VehicleModel
 from uuid import uuid4
 from datetime import datetime, timezone
 
 router = APIRouter()
+
+COUNTRY_NAMES = {
+    "ID": "Indonesia",
+    "MY": "Malaysia",
+    "PH": "Philippines",
+    "TH": "Thailand",
+    "VN": "Vietnam",
+}
+COUNTRY_NAME_VALUES = {name.upper() for name in COUNTRY_NAMES.values()} | set(COUNTRY_NAMES)
+
+
+def _sanitize_route_region(route: dict[str, Any]) -> dict[str, Any]:
+    item = dict(route)
+    region = str(item.get("region") or "").strip()
+    if region.upper() in COUNTRY_NAME_VALUES:
+        item["region"] = ""
+    return item
 
 
 class Telemetry(BaseModel):
@@ -37,8 +55,9 @@ class Telemetry(BaseModel):
 
 
 class ChatQuery(BaseModel):
-    route: str = default_route()
+    route: str = ""
     query: str
+    country: Optional[str] = None
     origin: Optional[str] = None
     origin_latitude: Optional[float] = None
     origin_longitude: Optional[float] = None
@@ -48,8 +67,9 @@ class ChatQuery(BaseModel):
 
 
 class SuggestionQuery(BaseModel):
-    route: str = default_route()
+    route: str = ""
     query: str = ""
+    country: Optional[str] = None
     origin: Optional[str] = None
     origin_latitude: Optional[float] = None
     origin_longitude: Optional[float] = None
@@ -95,18 +115,106 @@ def get_eta(stop_id: int, time_of_day: float = 8.0, traffic_factor: float = 1.0,
 
 
 @router.get("/demand")
-def get_demand():
-    return load_demand_forecast()
+def get_demand(country: Optional[str] = None):
+    return load_demand_forecast(country)
 
 
 @router.get("/fleet")
-def get_fleet():
-    return {"summary": fleet_store.summary(), "vehicles": [model_to_dict(vehicle) for vehicle in fleet_store.fleet()]}
+def get_fleet(route: Optional[str] = None, country: Optional[str] = None):
+    active_vehicles = {v.vehicle_id: model_to_dict(v) for v in fleet_store.fleet()}
+    all_vehicles = sqlite_store.list_vehicles()
+    merged = []
+    for db_v in all_vehicles:
+        if route and db_v["route"] != route:
+            continue
+        if country and db_v["country"] != country:
+            continue
+        vid = db_v["vehicle_id"]
+        if vid in active_vehicles:
+            v_data = active_vehicles[vid]
+            # Merge static properties
+            v_data["driver"] = db_v["driver"]
+            v_data["max_occupancy"] = db_v["max_occupancy"]
+            v_data["capacity"] = db_v["max_occupancy"] # override capacity
+            for key in ["brand", "model", "plate_number", "vehicle_type", "year", "registration_number", "country"]:
+                v_data[key] = db_v.get(key)
+            merged.append(v_data)
+        else:
+            merged.append({
+                "vehicle_id": vid,
+                "country": db_v["country"],
+                "route": db_v["route"],
+                "driver": db_v["driver"],
+                "max_occupancy": db_v["max_occupancy"],
+                "capacity": db_v["max_occupancy"],
+                "occupancy": 0,
+                "tier": "offline",
+                "status": "offline",
+                "latitude": 0.0,
+                "longitude": 0.0,
+                "eta_minutes": 0.0
+            })
+    summary = {
+        "vehicle_count": len(merged),
+        "active_alerts": len([v for v in merged if v.get("route_deviation", {}).get("anomaly")]),
+        "average_occupancy": round(
+            sum(int(v.get("occupancy") or 0) for v in merged) / max(1, len(merged)),
+            1,
+        ),
+        "overloaded": len([v for v in merged if v.get("tier") == "blinking_red"]),
+    }
+    return {"summary": summary, "vehicles": merged}
+
+@router.get("/vehicles")
+def get_vehicles():
+    return sqlite_store.list_vehicles()
+
+@router.post("/vehicles")
+def create_vehicle(v: VehicleModel):
+    route = _route_for_vehicle(v.route, v.country)
+    vehicle_type = route.get("route_type") or route.get("type") or v.vehicle_type
+    sqlite_store.save_vehicle(
+        v.vehicle_id, v.country, v.route, v.driver, v.max_occupancy,
+        v.brand, v.model, v.plate_number, vehicle_type, v.year,
+        v.registration_number, v.status,
+    )
+    return {"status": "created"}
+
+@router.put("/vehicles/{vehicle_id}")
+def update_vehicle(vehicle_id: str, v: VehicleModel):
+    route = _route_for_vehicle(v.route, v.country)
+    vehicle_type = route.get("route_type") or route.get("type") or v.vehicle_type
+    sqlite_store.save_vehicle(
+        vehicle_id, v.country, v.route, v.driver, v.max_occupancy,
+        v.brand, v.model, v.plate_number, vehicle_type, v.year,
+        v.registration_number, v.status,
+    )
+    return {"status": "updated"}
+
+@router.delete("/vehicles/{vehicle_id}")
+def delete_vehicle(vehicle_id: str):
+    sqlite_store.delete_vehicle(vehicle_id)
+    return {"status": "deleted"}
+
+
+def _route_for_vehicle(route_id: str, country: str) -> dict[str, Any]:
+    return next(
+        (
+            route
+            for route in list_routes()
+            if route.get("route") == route_id and (not country or route.get("country") == country)
+        ),
+        {},
+    )
 
 
 @router.get("/alerts")
-def get_alerts(include_acknowledged: bool = False):
-    return {"alerts": [model_to_dict(alert) for alert in fleet_store.alerts(include_acknowledged=include_acknowledged)]}
+def get_alerts(include_acknowledged: bool = False, limit: int = Query(100, ge=1, le=100), country: Optional[str] = None):
+    alerts = fleet_store.alerts(include_acknowledged=include_acknowledged)[:limit]
+    if country:
+        route_countries = {route["route"]: route.get("country") for route in list_routes()}
+        alerts = [alert for alert in alerts if route_countries.get(alert.route) == country]
+    return {"alerts": [model_to_dict(alert) for alert in alerts]}
 
 
 @router.post("/alerts/{alert_id}/ack")
@@ -133,18 +241,40 @@ def verify_alert(alert_id: str, payload: VerifyAlert):
 
 
 @router.get("/incidents")
-def get_incidents(limit: int = 50):
-    return {"incidents": fleet_store.incidents(limit=limit)}
+def get_incidents(limit: int = 50, country: Optional[str] = None):
+    incidents = sqlite_store.list_incidents(limit=limit, country=country)
+    return {"incidents": incidents}
 
 
 @router.get("/database/status")
-def get_database_status():
-    return fleet_store.database_status()
+def get_database_status(country: Optional[str] = None):
+    return sqlite_store.database_status(country=country)
+
+
+@router.post("/database/reset")
+def reset_database(country: Optional[str] = None):
+    try:
+        sqlite_store.reset_database(country=country)
+        # Reset the fleet store to align with empty database, otherwise state persists in memory
+        fleet_store.__init__()
+        return {"status": "ok", "message": "Demo data reset successfully."}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/routes")
-def get_routes(route: Optional[str] = None, q: Optional[str] = None):
+def get_routes(route: Optional[str] = None, q: Optional[str] = None, country: Optional[str] = None, active_only: bool = False):
     routes = list_routes()
+    if country:
+        routes = [item for item in routes if item.get("country") == country]
+    routes = [_sanitize_route_region(item) for item in routes]
+    if active_only:
+        active_routes = {
+            vehicle.get("route")
+            for vehicle in sqlite_store.list_vehicles()
+            if not country or vehicle.get("country") == country
+        }
+        routes = [item for item in routes if item.get("route") in active_routes]
     query = (route or q or "").strip().lower()
     if query:
         routes = [
@@ -154,16 +284,65 @@ def get_routes(route: Optional[str] = None, q: Optional[str] = None):
     return {"routes": routes}
 
 
+@router.get("/countries")
+def get_countries():
+    codes = sorted({item.get("country") for item in list_routes() if item.get("country")})
+    return {
+        "countries": [
+            {"code": code, "name": COUNTRY_NAMES.get(code, code)}
+            for code in codes
+        ]
+    }
+
+
+@router.get("/regions")
+def get_regions(country: Optional[str] = None):
+    """Return regions that have routes for a given country.
+    Used to populate region dropdown filters dynamically."""
+    if not country:
+        return {"regions": [], "cities": []}
+    country_routes = [item for item in list_routes() if item.get("country") == country]
+    regions = {
+        str(item.get("region") or item.get("zone") or item.get("city") or "").strip()
+        for item in country_routes
+    }
+    regions.update(sqlite_store.get_regions_for_country(country))
+    regions = sorted(region for region in regions if region and region.upper() not in COUNTRY_NAME_VALUES)
+    return {"regions": regions}
+
+
+@router.get("/locations")
+def get_locations(country: Optional[str] = None):
+    routes = list_routes()
+    if country:
+        routes = [item for item in routes if item.get("country") == country]
+    names = sorted({
+        str(item.get("city") or item.get("zone") or "").strip()
+        for item in routes
+        if str(item.get("city") or item.get("zone") or "").strip()
+    })
+    return {"locations": [{"value": name, "label": name} for name in names]}
+
+
 @router.get("/places")
-def get_places(q: Optional[str] = None, limit: int = 12, remote: bool = True):
-    return {"places": search_places(list_routes(), q or "", limit=limit, include_remote=remote)}
+def get_places(q: Optional[str] = None, limit: int = 12, remote: bool = True, country: Optional[str] = None):
+    routes = list_routes()
+    if country:
+        routes = [item for item in routes if item.get("country") == country]
+    return {"places": search_places(routes, q or "", limit=limit, include_remote=remote)}
 
 
 @router.post("/suggestions")
 def get_suggestions(query: SuggestionQuery):
+    route_context = (query.route or "").strip()
+    if query.country:
+        country_routes = {item.get("route") for item in list_routes() if item.get("country") == query.country}
+        if route_context not in country_routes:
+            route_context = ""
     return fleet_store.route_suggestions(
         query=query.query,
-        route=query.route,
+        route=route_context,
+        country=query.country,
         origin_text=query.origin or "",
         origin_latitude=query.origin_latitude,
         origin_longitude=query.origin_longitude,
@@ -178,6 +357,17 @@ class RoutePayload(BaseModel):
     route: str
     name: str
     polyline: list[list[float]]
+    country: Optional[str] = None
+    region: Optional[str] = None
+    tag: Optional[str] = None
+    route_type: Optional[str] = None
+    origin_name: Optional[str] = None
+    destination_name: Optional[str] = None
+    distance_km: Optional[float] = None
+    description: Optional[str] = None
+    minimum_fare: Optional[float] = None
+    fare_per_km: Optional[float] = None
+    points: list[RoutePoint] = []
 
     @validator("route", "name")
     def required_text(cls, value: str):
@@ -195,12 +385,40 @@ class RoutePayload(BaseModel):
 @router.post("/routes")
 def post_route(payload: RoutePayload, replace: bool = Query(False)):
     try:
-        if sqlite_store.route_exists(payload.route) and not replace:
-            raise HTTPException(status_code=409, detail=f"route id '{payload.route}' already exists")
-        if sqlite_store.route_name_exists(payload.name, exclude_route=payload.route if replace else None):
+        country = (payload.country or "PH").strip().upper()
+        visible_tag = (payload.tag or payload.route).strip()
+        storage_route = payload.route.strip()
+        if country and not storage_route.upper().startswith(f"{country}-"):
+            # Route tags are country-local. Prefix the stored ID only when needed
+            # so large country datasets never reject another country's matching tag.
+            cross_country_conflict = any(
+                item.get("route") == storage_route and item.get("country") and item.get("country") != country
+                for item in list_routes()
+            )
+            if cross_country_conflict:
+                storage_route = f"{country}-{storage_route}"
+        if sqlite_store.route_exists(visible_tag, country=country) and not replace:
+            raise HTTPException(status_code=409, detail=f"route tag '{visible_tag}' already exists in {country}")
+        if sqlite_store.route_name_exists(payload.name, exclude_route=storage_route if replace else None, country=country):
             raise HTTPException(status_code=409, detail=f"route name '{payload.name}' already exists")
-        sqlite_store.save_route(payload.route, payload.name, [(lat, lon) for lat, lon in payload.polyline])
-        return {"status": "ok", "route": payload.route}
+        point_dicts = [model_to_dict(point) for point in payload.points]
+        sqlite_store.save_route(
+            storage_route,
+            payload.name,
+            [(lat, lon) for lat, lon in payload.polyline],
+            country=country,
+            region=payload.region,
+            tag=visible_tag,
+            route_type=payload.route_type,
+            origin_name=payload.origin_name,
+            destination_name=payload.destination_name,
+            distance_km=payload.distance_km,
+            description=payload.description,
+            minimum_fare=payload.minimum_fare,
+            fare_per_km=payload.fare_per_km,
+            points=point_dicts,
+        )
+        return {"status": "ok", "route": storage_route, "tag": visible_tag}
     except HTTPException:
         raise
     except Exception as exc:
@@ -227,7 +445,18 @@ async def import_routes(
             return {"status": "invalid", "filename": file.filename, "commit": False, "routes": routes, "errors": errors}
         if commit:
             for route in routes:
-                sqlite_store.save_route(route["route"], route["name"], [(lat, lon) for lat, lon in route["polyline"]])
+                sqlite_store.save_route(
+                    route["route"],
+                    route["name"],
+                    [(lat, lon) for lat, lon in route["polyline"]],
+                    country=route.get("country"),
+                    region=route.get("region"),
+                    tag=route.get("tag"),
+                    route_type=route.get("route_type"),
+                    origin_name=route.get("origin_name"),
+                    destination_name=route.get("destination_name"),
+                    points=route.get("points"),
+                )
         return {
             "status": "committed" if commit else "preview",
             "filename": file.filename,
@@ -243,11 +472,7 @@ async def import_routes(
 @router.delete("/routes/{route}")
 def delete_route(route: str):
     try:
-        # simple delete using sqlite
-        sqlite_store.init_db()
-        conn = sqlite_store._connect()
-        with conn:
-            conn.execute("DELETE FROM routes WHERE route = ?", (route,))
+        sqlite_store.delete_route(route)
         return {"status": "deleted", "route": route}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -313,9 +538,15 @@ def get_project_config():
 
 @router.post("/chatbot")
 def chatbot(query: ChatQuery):
+    route_context = (query.route or "").strip()
+    if query.country:
+        country_routes = {item.get("route") for item in list_routes() if item.get("country") == query.country}
+        if route_context not in country_routes:
+            route_context = ""
     return fleet_store.recommendation(
-        route=query.route,
+        route=route_context,
         query=query.query,
+        country=query.country,
         origin_text=query.origin or "",
         origin_latitude=query.origin_latitude,
         origin_longitude=query.origin_longitude,

@@ -1,4 +1,4 @@
-  const api = `${location.origin}/api`;
+const api = `${location.origin}/api`;
   const state = {
     vehicles: [],
     routes: [],
@@ -10,24 +10,41 @@
     maps: {},
     mapLayers: {},
     mapClusters: {},
+    mapTileLayers: {},
+    mapActiveTile: {},
     geoWatchId: null,
     lastPosition: null,
+    selectedOrigin: null,
     selectedDestination: null,
     selectedVehicleId: null,
     routeQuery: "",
+    countryFilter: "PH",
     cityFilter: "all",
+    regionFilter: "all",
     places: [],
     tripSuggestions: [],
     tripMatches: [],
     tripMessage: "",
+    tripNoRouteFound: false,
     originInput: "Current Location",
     destinationInput: "",
+    usingCurrentLocation: false,
     operatorFleetQuery: "",
     operatorRouteFilter: "all",
     operatorTierFilter: "all",
+    adminRouteQuery: "",
     placeSearchTimers: {},
     chatContext: { route: "", vehicleId: "" },
+    countries: [],
+    locations: [],
+    userInteracted: false,
   };
+
+  const pinnedCountryCodes = ["BN", "KH", "ID", "LA", "MY", "MM", "PH", "SG", "TH", "TL", "VN"];
+  const fallbackCountries = [
+    ["PH", "Philippines"], ["ID", "Indonesia"], ["MY", "Malaysia"], ["TH", "Thailand"], ["VN", "Vietnam"],
+    ["SG", "Singapore"], ["BN", "Brunei"], ["KH", "Cambodia"], ["LA", "Laos"], ["MM", "Myanmar"], ["TL", "Timor-Leste"],
+  ].map(([code, name]) => ({ code, name }));
 
   const tierCopy = {
     green: "Seats available",
@@ -77,13 +94,39 @@
     showToast._timer = setTimeout(() => toast.classList.remove("show"), 2600);
   }
 
-  function cityName(route) {
-    return route.city || route.zone || "Philippines";
+  function sortCountries(countries) {
+    const unique = new Map(countries.filter(c => c.code && c.name).map(c => [c.code, c]));
+    return [...unique.values()].sort((a, b) => {
+      const ap = pinnedCountryCodes.includes(a.code);
+      const bp = pinnedCountryCodes.includes(b.code);
+      if (ap !== bp) return ap ? -1 : 1;
+      if (ap && bp) return pinnedCountryCodes.indexOf(a.code) - pinnedCountryCodes.indexOf(b.code);
+      return a.name.localeCompare(b.name);
+    });
   }
 
-  function routeStopPoints(route) {
-    const points = (route?.stops && route.stops.length ? route.stops : route?.polyline || []);
-    return points.filter(isMapCoordinate);
+  async function loadCountries() {
+    if (state.countries.length) return state.countries;
+    try {
+      const result = await getJson("/countries");
+      state.countries = sortCountries(result.countries || []);
+      if (state.countries.length) return state.countries;
+    } catch (e) {}
+    state.countries = sortCountries(fallbackCountries);
+    return state.countries;
+  }
+  function normalizeStopLabel(stop, fallback = "") {
+    const raw = String(stop?.name || stop?.label || fallback || "").trim();
+    if (!raw) return "Unknown stop";
+    return raw
+      .replace(/\s*\(\s*[-+]?\d+(?:\.\d+)?\s*,\s*[-+]?\d+(?:\.\d+)?\s*\)\s*$/, "")
+      .replace(/\s*:\s*(Origin|Turn|End of Route|Board\/Alight|Alight or Board Stop).*$/i, "")
+      .trim();
+  }
+
+  function formatStopCoords(stop) {
+    if (!isMapCoordinate(stop)) return "";
+    return `${Number(stop.latitude).toFixed(5)}, ${Number(stop.longitude).toFixed(5)}`;
   }
 
   function routeDistanceMeters(route, origin) {
@@ -121,6 +164,73 @@
       landmarks: (route.landmarks || []).slice(0, 4),
       vehicles,
     };
+  }
+
+  function routeDisplayTitle(route) {
+    if (!route) return "";
+    const tag = route.tag || route.route || "";
+    const type = route.route_type || "";
+    const origin = route.origin_name || "";
+    const destination = route.destination_name || "";
+    const routeName = route.name || "";
+    if (tag && type && origin && destination) {
+      // Vehicle/route display names must remain: TAG - TYPE | ORIGIN → END.
+      return `${tag} - ${type} | ${origin} → ${destination}`;
+    }
+    if (routeName) return `${tag}${tag ? " | " : ""}${routeName}`;
+    return `${route.route || ""}`.trim();
+  }
+
+  function cityName(route) {
+    return String(route?.city || route?.zone || route?.region || "Unknown region").trim() || "Unknown region";
+  }
+
+  function regionName(route) {
+    return String(route?.region || route?.zone || route?.city || cityName(route)).trim() || "Unknown region";
+  }
+
+  function routeStopPoints(route) {
+    const points = (route?.points && route.points.length ? route.points : route?.stops && route.stops.length ? route.stops : route?.polyline || [])
+      .map((point, index, all) => {
+        const coord = getCoordinate(point);
+        if (!coord) return null;
+        const isObject = point && !Array.isArray(point);
+        const pointType = isObject
+          ? (point.point_type || (index === 0 ? "origin" : index === all.length - 1 ? "end_of_route" : "waypoint"))
+          : (index === 0 ? "origin" : index === all.length - 1 ? "end_of_route" : "waypoint");
+        const label = isObject
+          ? (point.label || point.name || stopTypeLabel({ point_type: pointType }, index, all.length))
+          : stopTypeLabel({ point_type: pointType }, index, all.length);
+        return {
+          ...coord,
+          sequence_order: Number(point?.sequence_order || index + 1),
+          point_type: pointType,
+          label,
+          name: normalizeStopLabel(point, label),
+        };
+      })
+      .filter(Boolean);
+    return points.sort((left, right) => Number(left.sequence_order || 0) - Number(right.sequence_order || 0));
+  }
+
+  function routePointCoordinateLabel(point, index, total) {
+    const coord = getCoordinate(point);
+    if (!coord) return "";
+    const type = point?.point_type || (index === 0 ? "origin" : index === total - 1 ? "end_of_route" : "waypoint");
+    let label = "Point";
+    if (type === "origin" || index === 0) label = "Origin";
+    else if (type === "end" || type === "end_of_route" || index === total - 1) label = "End";
+    else if (type === "alight_or_board_stop" || type === "boarding_stop") label = `Stop ${index}`;
+    else label = `Checkpoint ${index}`;
+    return `${label}: ${coord.latitude.toFixed(6)}, ${coord.longitude.toFixed(6)}`;
+  }
+
+  function stopTypeLabel(point, index, total) {
+    const type = point?.point_type || (index === 0 ? "origin" : index === total - 1 ? "end" : "turn");
+    if (type === "origin") return "Origin";
+    if (type === "alight_or_board_stop") return "Board/Alight";
+    if (type === "end" || type === "end_of_route") return "End of route";
+    return "Turn";
   }
 
   function vehicleSort(a, b) {
@@ -162,3 +272,229 @@
     return points[Math.min(points.length - 1, Math.max(0, Math.floor(points.length * ratio)))];
   }
 
+  function openModal({ title = "", bodyHtml = "", actions = [] } = {}) {
+    const overlay = document.createElement("div");
+    overlay.className = "modal";
+    overlay.innerHTML = `
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>${escapeHtml(title)}</h2>
+          <button class="button clear" type="button" data-modal-close>&times;</button>
+        </div>
+        <div class="modal-body">${bodyHtml}</div>
+        ${actions.length ? `<div class="route-form-actions">${actions.map(action => `<button class="button ${escapeHtml(action.className || "secondary")}" type="button" data-modal-action="${escapeHtml(action.id)}">${escapeHtml(action.label)}</button>`).join("")}</div>` : ""}
+      </div>
+    `;
+    const close = () => overlay.remove();
+    overlay.querySelector("[data-modal-close]")?.addEventListener("click", close);
+    overlay.addEventListener("click", event => {
+      if (event.target === overlay) close();
+    });
+    actions.forEach(action => {
+      overlay.querySelector(`[data-modal-action="${CSS.escape(action.id)}"]`)?.addEventListener("click", () => {
+        if (typeof action.onClick === "function") action.onClick({ overlay, close });
+      });
+    });
+    document.body.appendChild(overlay);
+    return { overlay, close };
+  }
+
+  function confirmAction({ title = "Confirm", message = "", inputLabel = "", inputValue = "", confirmText = "Confirm", danger = false } = {}) {
+    return new Promise(resolve => {
+      const hasInput = Boolean(inputLabel);
+      const modal = openModal({
+        title,
+        bodyHtml: `
+          <p>${escapeHtml(message)}</p>
+          ${hasInput ? `<label style="display:grid;gap:6px;margin-top:12px;"><span>${escapeHtml(inputLabel)}</span><textarea data-confirm-input rows="3">${escapeHtml(inputValue)}</textarea></label>` : ""}
+        `,
+        actions: [
+          {
+            id: "cancel",
+            label: "Cancel",
+            className: "secondary",
+            onClick: ({ close }) => {
+              close();
+              resolve(false);
+            },
+          },
+          {
+            id: "confirm",
+            label: confirmText,
+            className: danger ? "danger" : "primary",
+            onClick: ({ overlay, close }) => {
+              const value = hasInput ? overlay.querySelector("[data-confirm-input]")?.value.trim() : true;
+              close();
+              resolve(value);
+            },
+          },
+        ],
+      });
+      modal.overlay.querySelector("[data-confirm-input]")?.focus();
+    });
+  }
+
+  function renderRouteDirectory() {
+    const container = qs("routeList");
+    if (!container) return;
+    const query = (state.routeQuery || "").toLowerCase();
+    const cityFilter = state.cityFilter || state.regionFilter || "all";
+    const matched = sortedRoutesForDisplay(state.routes || [])
+      .filter(route => cityFilter === "all" || regionName(route) === cityFilter)
+      .filter(route => {
+        const haystack = `${route.route} ${route.name} ${route.region || ""} ${route.zone || ""} ${(route.landmarks || []).join(" ")}`.toLowerCase();
+        return !query || haystack.includes(query);
+      })
+      .map(route => ({ ...route, summary: routeSummary(route) }));
+    if (!matched.length) {
+      container.innerHTML = `<p class="empty-copy">No route matched that search.</p>`;
+      return;
+    }
+    const grouped = matched.reduce((accumulator, route) => {
+      const region = regionName(route);
+      if (!accumulator[region]) accumulator[region] = [];
+      accumulator[region].push(route);
+      return accumulator;
+    }, {});
+    container.innerHTML = Object.entries(grouped).map(([groupName, groupRoutes]) => `
+      <section class="route-group">
+        <div class="route-group-head">
+          <h3>${escapeHtml(groupName)}</h3>
+          <span>${groupRoutes.length} route${groupRoutes.length === 1 ? "" : "s"}</span>
+        </div>
+        <div class="route-group-list">
+          ${groupRoutes.map(route => {
+            const summary = route.summary;
+            const selected = route.route === state.selectedRoute ? " selected" : "";
+            const stops = routeStopPoints(route).slice(0, 12);
+            return `
+              <div class="route-card clean-route-card${selected}">
+                <div class="route-card-head">
+                  <div>
+                    <h3>${escapeHtml(routeDisplayTitle(route))}</h3>
+                    <p>${escapeHtml(regionName(route))} - ${summary.stopCount} stops - ${summary.vehicleCount} live PUVs</p>
+                  </div>
+                  <span class="route-distance">${summary.distanceKm ? `~${summary.distanceKm} km away` : "Near me"}</span>
+                </div>
+                <div class="route-card-body" style="margin-top: 12px; display: none; gap: 8px;">
+                  ${stops.length ? `<ul class="route-stops-list" style="margin:4px 0 8px 0;padding-left:20px;font-size:13px;color:var(--text-muted);display:grid;gap:4px;">${stops.map((stop, index) => `<li>${escapeHtml(routePointCoordinateLabel(stop, index, stops.length))}</li>`).join("")}</ul>` : `<p class="route-landmarks">${escapeHtml((summary.endpoints || []).join(" - "))}</p>`}
+                  <div class="route-actions" style="margin-top: 8px;">
+                    <button class="mini-action" data-use-and-preview-route="${escapeHtml(route.route)}" type="button">Use route &amp; show in map</button>
+                  </div>
+                </div>
+                <div style="margin-top: 8px;">
+                  <button class="mini-action outline" data-toggle-route="${escapeHtml(route.route)}" type="button" style="width: 100%;">Show route details</button>
+                </div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      </section>
+    `).join("");
+    container.querySelectorAll("[data-use-and-preview-route]").forEach(button => {
+      button.addEventListener("click", () => {
+        state.selectedRoute = button.dataset.useAndPreviewRoute;
+        state.tripSuggestions = [];
+        if (typeof renderMobile === "function") renderMobile();
+        if (typeof activateMobileTab === "function") activateMobileTab("mapTab");
+        if (typeof previewRoute === "function") previewRoute(state.selectedRoute, "mobileMap");
+      });
+    });
+    container.querySelectorAll("[data-toggle-route]").forEach(button => {
+      button.addEventListener("click", () => {
+        const body = button.closest(".route-card")?.querySelector(".route-card-body");
+        if (!body) return;
+        const visible = body.style.display !== "none";
+        body.style.display = visible ? "none" : "grid";
+        button.textContent = visible ? "Show route details" : "Hide route details";
+      });
+    });
+  }
+
+  function renderSearchableSelect(containerId, options, currentValue, onChangeCallback, config = {}) {
+    const container = qs(containerId);
+    if (!container) return;
+
+    const { placeholder = "Select...", label = "Select...", compact = false } = config;
+
+    const selectedOption = options.find(o => String(o.value) === String(currentValue));
+    let displayLabel = label;
+    if (selectedOption) {
+      displayLabel = selectedOption.label;
+    } else if (currentValue === 'all') {
+      displayLabel = 'All countries';
+    }
+
+    const html = `
+      <div class="dropdown-container ${compact ? 'compact' : ''}">
+        <button type="button" class="dropdown-button">
+          <span>${escapeHtml(displayLabel)}</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="dropdown-popup hidden">
+          <input type="search" placeholder="Search..." class="dropdown-search" />
+          <ul class="dropdown-list"></ul>
+        </div>
+      </div>
+    `;
+
+    container.innerHTML = html;
+
+    const button = container.querySelector(".dropdown-button");
+    const popup = container.querySelector(".dropdown-popup");
+    const search = container.querySelector(".dropdown-search");
+    const list = container.querySelector(".dropdown-list");
+    const buttonSpan = button.querySelector("span");
+
+    function renderOptions(query = "") {
+      const q = query.toLowerCase();
+      const filtered = options.filter(o => o.label.toLowerCase().includes(q));
+      
+      list.innerHTML = filtered.length 
+        ? filtered.map(o => `<li data-value="${escapeHtml(String(o.value))}" class="${String(o.value) === String(currentValue) ? 'selected' : ''}">${escapeHtml(o.label)}</li>`).join("")
+        : `<li><span style="color:var(--muted)">No results found</span></li>`;
+    }
+
+    renderOptions();
+
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isHidden = popup.classList.contains("hidden");
+      document.querySelectorAll(".dropdown-popup").forEach(p => p.classList.add("hidden"));
+      if (isHidden) {
+        popup.classList.remove("hidden");
+        search.value = "";
+        renderOptions();
+        search.focus();
+      }
+    });
+
+    search.addEventListener("click", e => e.stopPropagation());
+    search.addEventListener("input", (e) => {
+      renderOptions(e.target.value);
+    });
+
+    list.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const li = e.target.closest("li");
+      if (!li || !li.hasAttribute("data-value")) return;
+      
+      const value = li.getAttribute("data-value");
+      const option = options.find(o => String(o.value) === String(value));
+      
+      if (option) {
+        buttonSpan.textContent = option.label;
+        currentValue = value;
+        renderOptions(search.value);
+      }
+      
+      popup.classList.add("hidden");
+      onChangeCallback(value);
+    });
+  }
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".dropdown-container")) {
+      document.querySelectorAll(".dropdown-popup").forEach(p => p.classList.add("hidden"));
+    }
+  });

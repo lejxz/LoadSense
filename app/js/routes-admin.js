@@ -1,24 +1,16 @@
-﻿  function findNearestRoute(lat, lon) {
+
+function findNearestRoute(lat, lon) {
     if (!state.routes || !state.routes.length) return null;
-    function toRad(x){return x*Math.PI/180}
-    function haversine(aLat,aLon,bLat,bLon){
-      const R = 6371000;
-      const dLat = toRad(bLat - aLat);
-      const dLon = toRad(bLon - aLon);
-      const A = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(toRad(aLat))*Math.cos(toRad(bLat))*Math.sin(dLon/2)*Math.sin(dLon/2);
-      const C = 2 * Math.atan2(Math.sqrt(A), Math.sqrt(1-A));
-      return R * C;
-    }
     let best = null;
     let bestD = Infinity;
     for (const r of state.routes) {
       const points = (r.polyline || []).map(p => [Number(p.latitude), Number(p.longitude)]);
       for (const [plat, plon] of points) {
-        const d = haversine(lat, lon, plat, plon);
+        const d = haversineMeters(lat, lon, plat, plon);
         if (d < bestD) { bestD = d; best = r.route; }
       }
     }
-    // threshold 1000m to auto-select
+    // threshold 600m to auto-select
     return bestD < 600 ? best : null;
   }
 
@@ -62,15 +54,20 @@
     const route = state.routes.find(item => item.route === routeId);
     if (!route) return;
     state.selectedRoute = routeId;
-    const panel = qs("routePreviewPanel");
-    if (panel && containerId === "routePreviewMap") {
-      panel.classList.remove("hidden");
-      qs("routePreviewTitle").textContent = `${route.route} ${route.name}`;
+    const modal = qs("routePreviewModal");
+    if (modal && containerId === "routePreviewMap") {
+      modal.classList.remove("hidden");
+      qs("routePreviewTitle").textContent = routeDisplayTitle(route);
       const summary = routeSummary(route);
       qs("routePreviewMeta").textContent = `${cityName(route)} - ${summary.stopCount} stops - ${summary.vehicleCount} live PUVs`;
     }
     drawMap(containerId, routeId);
-    setTimeout(() => fitRoute(containerId, routeId), 120);
+    setTimeout(() => {
+      fitRoute(containerId, routeId);
+      if (containerId === "routePreviewMap" && state.maps[containerId]) {
+        state.maps[containerId].invalidateSize();
+      }
+    }, 120);
   }
 
   function zoomVehicle(vehicleId) {
@@ -92,11 +89,35 @@
   function renderRoutesAdmin() {
     const container = qs('routesTable');
     if (!container) return;
-    if (!state.routes || !state.routes.length) {
+    
+    let displayRoutes = state.routes || [];
+    if (state.adminRouteQuery) {
+      const q = state.adminRouteQuery.toLowerCase();
+      displayRoutes = displayRoutes.filter(r => 
+        (r.route && r.route.toLowerCase().includes(q)) || 
+        (r.name && r.name.toLowerCase().includes(q))
+      );
+    }
+    if (state.countryFilter && state.countryFilter !== "all") {
+      const c = state.countryFilter.toLowerCase();
+      displayRoutes = displayRoutes.filter(r => r.country && r.country.toLowerCase() === c);
+    }
+    if (state.adminRegionFilter) {
+      const p = state.adminRegionFilter.toLowerCase();
+      displayRoutes = displayRoutes.filter(r => r.region && r.region.toLowerCase().includes(p));
+    }
+    const regionFilter = qs('regionFilter');
+    if (regionFilter) {
+      const allRoutesForCountry = state.routes ? state.routes.filter(r => !state.countryFilter || state.countryFilter === "all" || (r.country && r.country.toLowerCase() === state.countryFilter.toLowerCase())) : [];
+      const uniqueRegions = [...new Set(allRoutesForCountry.map(r => r.region).filter(Boolean))].sort();
+      regionFilter.innerHTML = `<option value="">All regions</option>` + uniqueRegions.map(p => `<option value="${escapeHtml(p)}"${state.adminRegionFilter === p ? " selected" : ""}>${escapeHtml(p)}</option>`).join('');
+    }
+
+    if (!displayRoutes.length) {
       container.innerHTML = '<p class="empty-copy">No routes found.</p>';
       return;
     }
-    container.innerHTML = state.routes.map(r => `
+    container.innerHTML = displayRoutes.map(r => `
       <article class="route-card">
         <div class="route-card-admin-row">
           <div>
@@ -111,30 +132,188 @@
         </div>
       </article>
     `).join('');
-    document.querySelectorAll('.edit-route').forEach(btn => btn.addEventListener('click', e => {
-      const route = btn.dataset.route;
-      const r = state.routes.find(x => x.route === route);
-      if (!r) return;
-      qs('routeId').value = r.route;
-      qs('routeName').value = r.name;
-      qs('routePolyline').value = (r.polyline || []).map(p => `${p.latitude},${p.longitude}`).join('\n');
-    }));
+    document.querySelectorAll('.edit-route').forEach(btn => btn.addEventListener('click', () => editRoute(btn.dataset.route)));
     document.querySelectorAll('[data-route-preview]').forEach(btn => btn.addEventListener('click', e => {
       previewRoute(btn.dataset.routePreview, 'routePreviewMap');
     }));
     document.querySelectorAll('.delete-route').forEach(btn => {
       btn.addEventListener('click', async () => {
         const route = btn.dataset.route;
-        if (!confirm(`Delete route ${route}?`)) return;
+        const confirmed = await confirmAction({
+          title: "Delete route",
+          message: `Delete route ${route}?`,
+          confirmText: "Delete",
+          danger: true,
+        });
+        if (!confirmed) return;
         const response = await fetch(api + `/routes/${route}`, { method: 'DELETE' });
         if (!response.ok) {
-          alert(await response.text());
+          showToast(await response.text());
           return;
         }
-        await refreshData();
+        await refreshData({ includeAuxiliary: false });
         renderOperator();
+        qs("routeModal")?.classList.add("hidden");
+        if (typeof showToast === "function") showToast("Route deleted.");
       });
     });
+  }
+
+  const routeTypeOptions = ["BRT", "Bus", "City Bus", "Ferry", "FX", "Jeepney", "Minibus", "Other", "Shuttle", "Train", "Tricycle", "UV Express"];
+  const routePointTypes = [
+    { value: "alight_or_board_stop", label: "Alight or Board Stop" },
+    { value: "end_of_route", label: "End of Route" },
+    { value: "origin", label: "Origin" },
+    { value: "road_segment", label: "Road Segment" },
+    { value: "waypoint", label: "Waypoint" },
+  ];
+
+  function setupRouteTypeSelect() {
+    const select = qs("routeType");
+    if (select && !select.options.length) {
+      select.innerHTML = routeTypeOptions.map(type => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`).join("");
+      select.value = "Jeepney";
+    }
+    qs("addRoutePoint")?.addEventListener("click", () => addRoutePointRow());
+    qs("hintButton")?.addEventListener("click", () => qs("routeHint")?.classList.toggle("is-visible"));
+    qs("previewRoute")?.addEventListener("click", () => previewRoutePointRows());
+  }
+
+  function parseGeneratedRouteName(route) {
+    const name = String(route?.name || "");
+    const match = name.match(/^\s*(.*?)\s*-\s*(.*?)\s*\|\s*(.*?)\s*(?:→|â†’|->)\s*(.*?)\s*$/);
+    if (!match) return {};
+    return {
+      tag: match[1]?.trim(),
+      route_type: match[2]?.trim(),
+      origin_name: match[3]?.trim(),
+      destination_name: match[4]?.trim(),
+    };
+  }
+
+  function normalizeRouteEditPoints(route) {
+    const source = route.points && route.points.length ? route.points : route.polyline || [];
+    return source.map((point, index, arr) => ({
+      sequence_order: Number(point.sequence_order || index + 1),
+      latitude: Number(point.latitude),
+      longitude: Number(point.longitude),
+      point_type: point.point_type || (index === 0 ? "origin" : index === arr.length - 1 ? "end_of_route" : "waypoint"),
+      label: point.label || point.name || "",
+    })).filter(point => Number.isFinite(point.latitude) && Number.isFinite(point.longitude));
+  }
+
+  function setInputValue(id, value) {
+    const element = qs(id);
+    if (element) element.value = value ?? "";
+  }
+
+  function editRoute(routeId) {
+    const route = state.routes.find(item => item.route === routeId);
+    if (!route) return;
+    const parsed = parseGeneratedRouteName(route);
+    const tag = route.tag || parsed.tag || route.route || "";
+    const type = route.route_type || route.type || parsed.route_type || "Jeepney";
+    setupRouteTypeSelect();
+    if (qs("routeType") && ![...qs("routeType").options].some(option => option.value === type)) {
+      qs("routeType").add(new Option(type, type));
+    }
+    setInputValue("routeId", tag);
+    setInputValue("routeType", type);
+    setInputValue("routeOrigin", route.origin_name || parsed.origin_name || "");
+    setInputValue("routeDestination", route.destination_name || parsed.destination_name || "");
+    setInputValue("routeRegion", route.region || route.zone || route.city || "");
+    setInputValue("routeDistance", route.distance_km ?? "");
+    setInputValue("routeMinimumFare", route.minimum_fare ?? "");
+    setInputValue("routeFarePerKm", route.fare_per_km ?? "");
+    setInputValue("routeDescription", route.description || "");
+    setRoutePointRows(normalizeRouteEditPoints(route));
+    qs("routeFormErrors")?.classList.add("hidden");
+    const modal = qs("routeModal");
+    if (modal) {
+      qs("routeModalTitle").textContent = "Edit Route";
+      modal.classList.remove("hidden");
+    }
+  }
+
+
+  function setRoutePointRows(points) {
+    const container = qs("routePointsContainer");
+    if (!container) return;
+    container.innerHTML = "";
+    const seed = points.length ? points : [
+      { sequence_order: 1, latitude: "", longitude: "", point_type: "origin", label: "Origin" },
+      { sequence_order: 2, latitude: "", longitude: "", point_type: "end_of_route", label: "End of Route" },
+    ];
+    seed.forEach(point => addRoutePointRow(point));
+    updateRoutePointSequence();
+  }
+
+  function addRoutePointRow(point = {}) {
+    const container = qs("routePointsContainer");
+    if (!container) return;
+    const row = document.createElement("div");
+    row.className = "route-point-row";
+    row.innerHTML = `
+      <span class="point-order route-point-sequence">${escapeHtml(point.sequence_order || container.children.length + 1)}</span>
+      <input class="route-point-lat" type="number" step="0.000001" value="${escapeHtml(point.latitude ?? "")}" placeholder="Latitude" />
+      <input class="route-point-lon" type="number" step="0.000001" value="${escapeHtml(point.longitude ?? "")}" placeholder="Longitude" />
+      <select class="route-point-type">${routePointTypes.map(type => `<option value="${escapeHtml(type.value)}"${(point.point_type || "waypoint") === type.value ? " selected" : ""}>${escapeHtml(type.label)}</option>`).join("")}</select>
+      <input class="route-point-label" value="${escapeHtml(point.label || "")}" placeholder="Label" />
+      <button class="mini-action danger" type="button" data-remove-point>Delete</button>
+    `;
+    row.querySelector("[data-remove-point]").addEventListener("click", () => {
+      row.remove();
+      updateRoutePointSequence();
+    });
+    container.appendChild(row);
+    updateRoutePointSequence();
+  }
+
+  function updateRoutePointSequence() {
+    qs("routePointsContainer")?.querySelectorAll(".route-point-row").forEach((row, index) => {
+      row.querySelector(".route-point-sequence").textContent = index + 1;
+    });
+  }
+
+  function collectRoutePointRows() {
+    return [...(qs("routePointsContainer")?.querySelectorAll(".route-point-row") || [])]
+      .map((row, index) => ({
+        sequence_order: index + 1,
+        latitude: Number(row.querySelector(".route-point-lat").value),
+        longitude: Number(row.querySelector(".route-point-lon").value),
+        point_type: row.querySelector(".route-point-type").value || "waypoint",
+        label: row.querySelector(".route-point-label").value.trim(),
+      }))
+      .filter(point => Number.isFinite(point.latitude) && Number.isFinite(point.longitude));
+  }
+
+  function previewRoutePointRows() {
+    const route = qs("routeId").value.trim() || "__preview__";
+    const routeType = qs("routeType").value || "Jeepney";
+    const originName = qs("routeOrigin").value.trim();
+    const destinationName = qs("routeDestination").value.trim();
+    const points = collectRoutePointRows();
+    if (points.length < 2) {
+      showToast("Add at least two valid coordinates to preview.");
+      return;
+    }
+    const existing = state.routes.find(item => item.route === route);
+    const preview = {
+      route,
+      // Auto-generated route/vehicle display names must remain: TAG - TYPE | ORIGIN → END.
+      name: `${route} - ${routeType} | ${originName} → ${destinationName}`,
+      country: selectedCountryCode(),
+      city: qs("routeCity")?.value || "",
+      polyline: points.map(point => ({ latitude: point.latitude, longitude: point.longitude })),
+      points,
+      stops: points,
+      route_type: routeType,
+      origin_name: originName,
+      destination_name: destinationName,
+    };
+    if (existing) Object.assign(existing, preview);
+    else state.routes.push(preview);
+    previewRoute(route, "routePreviewMap");
   }
 
   async function initRoutesAdmin() {
@@ -147,31 +326,64 @@
     const previewRouteFile = qs('previewRouteFile');
     const commitRouteFile = qs('commitRouteFile');
     const routeImportPreview = qs('routeImportPreview');
+    setupRouteTypeSelect();
+    setRoutePointRows([]);
+
+    qs("addRouteBtn")?.addEventListener("click", () => {
+      qs("routeForm")?.reset();
+      setRoutePointRows([]);
+      const modal = qs("routeModal");
+      if (modal) {
+        qs("routeModalTitle").textContent = "Add Route";
+        modal.classList.remove("hidden");
+      }
+    });
+    qs("closeRouteModal")?.addEventListener("click", () => qs("routeModal")?.classList.add("hidden"));
+    qs("closeRoutePreviewModal")?.addEventListener("click", () => qs("routePreviewModal")?.classList.add("hidden"));
     if (save) {
       save.addEventListener('click', async () => {
         const route = qs('routeId').value.trim();
-        const name = qs('routeName').value.trim();
-        const polytext = qs('routePolyline').value.trim();
-        if (!route || !name) { alert('Route and name required'); return; }
-        const poly = polytext.split('\n').map(line => line.trim()).filter(Boolean).map(line => {
-          const [lat, lon] = line.split(',').map(s => parseFloat(s.trim()));
-          return [lat, lon];
-        });
-        const replace = state.routes.some(r => r.route === route);
-        const response = await fetch(api + `/routes?replace=${replace ? 'true' : 'false'}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ route, name, polyline: poly }) });
-        if (!response.ok) { alert(await response.text()); return; }
+        const routeType = qs('routeType').value.trim();
+        const originName = qs('routeOrigin').value.trim();
+        const destinationName = qs('routeDestination').value.trim();
+        // Auto-generated route/vehicle display names must remain: TAG - TYPE | ORIGIN → END.
+        const name = `${route} - ${routeType} | ${originName} → ${destinationName}`;
+        const points = collectRoutePointRows();
+        if (!route || !routeType || !originName || !destinationName) { showToast('Route tag, type, origin, and destination are required'); return; }
+        if (points.length < 2) { showToast('Add at least two coordinates.'); return; }
+        const poly = points.map(point => [point.latitude, point.longitude]);
+        const replace = state.routes.some(r => r.country === selectedCountryCode() && (r.route === route || r.tag === route));
+        const regionVal = qs("routeRegion")?.value.trim() || "";
+        const payload = {
+          route,
+          name,
+          polyline: poly,
+          country: selectedCountryCode(),
+          region: regionVal,
+          tag: route,
+          route_type: routeType,
+          origin_name: originName,
+          destination_name: destinationName,
+          distance_km: qs('routeDistance').value ? Number(qs('routeDistance').value) : null,
+          minimum_fare: qs('routeMinimumFare') && qs('routeMinimumFare').value ? Number(qs('routeMinimumFare').value) : null,
+          fare_per_km: qs('routeFarePerKm') && qs('routeFarePerKm').value ? Number(qs('routeFarePerKm').value) : null,
+          description: qs('routeDescription').value.trim(),
+          points,
+        };
+        const response = await fetch(api + `/routes?replace=${replace ? 'true' : 'false'}`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        if (!response.ok) { showToast(await response.text()); return; }
         qs('routeId').value = '';
-        qs('routeName').value = '';
-        qs('routePolyline').value = '';
-        await refreshData();
+        qs("routeForm")?.reset();
+        setRoutePointRows([]);
+        await refreshData({ includeAuxiliary: false });
         renderOperator();
+        qs("routeModal")?.classList.add("hidden");
       });
     }
     if (clear) {
       clear.addEventListener('click', () => {
-        qs('routeId').value = '';
-        qs('routeName').value = '';
-        qs('routePolyline').value = '';
+        qs("routeForm")?.reset();
+        setRoutePointRows([]);
       });
     }
     if (exportBtn) {
@@ -192,11 +404,11 @@
           const response = await fetch(api + '/routes?replace=true', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ route: r.route, name: r.name, polyline: poly }) });
           if (!response.ok) throw new Error(await response.text());
         }
-        await refreshData();
+        await refreshData({ includeAuxiliary: false });
         renderOperator();
         showToast(`Imported ${json.length} route${json.length === 1 ? '' : 's'}.`);
       } catch (e) {
-        alert('Invalid JSON: ' + e.message);
+        showToast('Invalid JSON: ' + e.message);
       }
     }
     if (importBtn && importArea) {
@@ -214,7 +426,7 @@
     }
     async function uploadRouteFile(commit) {
       if (!routeFile || !routeFile.files || !routeFile.files[0]) {
-        alert('Choose a GeoJSON, CSV, or GTFS zip file first.');
+        showToast('Choose a GeoJSON, CSV, or GTFS zip file first.');
         return;
       }
       const form = new FormData();
@@ -230,7 +442,7 @@
       }
       routeImportPreview.innerHTML = renderImportResult(result);
       if (commit && result.status === 'committed') {
-        await refreshData();
+        await refreshData({ includeAuxiliary: false });
         renderOperator();
       }
     }
@@ -353,13 +565,16 @@
   }
 
   async function initOperator() {
-    await refreshData();
+    await loadCountries();
+    await refreshData({ includeAuxiliary: false });
     renderOperator();
+    refreshAuxiliaryData().then(() => renderOperator()).catch(() => {});
     await initRoutesAdmin();
     initOperatorTabs();
     qs("refreshOperator").addEventListener("click", async () => {
-      await refreshData();
+      await refreshData({ includeAuxiliary: false });
       renderOperator();
+      refreshAuxiliaryData().then(() => renderOperator()).catch(() => {});
     });
     const fleetSearch = qs("fleetSearch");
     if (fleetSearch) {
@@ -375,6 +590,22 @@
         renderOperator();
       });
     }
+
+    const provinceFilter = qs("provinceFilter");
+    if (provinceFilter) {
+      provinceFilter.addEventListener("change", event => {
+        state.adminProvinceFilter = event.target.value.trim();
+        renderOperator();
+      });
+    }
+
+    const adminRouteSearch = qs("adminRouteSearch");
+    if (adminRouteSearch) {
+      adminRouteSearch.addEventListener("input", event => {
+        state.adminRouteQuery = event.target.value.trim();
+        renderOperator();
+      });
+    }
     const tierFilter = qs("fleetTierFilter");
     if (tierFilter) {
       tierFilter.addEventListener("change", event => {
@@ -382,10 +613,34 @@
         renderOperator();
       });
     }
-    setInterval(async () => {
-      await refreshData();
+    qs("resetDatabaseBtn")?.addEventListener("click", async () => {
+      const confirmed = await confirmAction({
+        title: "Reset demo data",
+        message: "Clear vehicles, routes, alerts, telemetry, and chat history?",
+        confirmText: "Reset",
+        danger: true,
+      });
+      if (!confirmed) return;
+      await getJson("/database/reset", { method: "POST" });
+      await refreshData({ includeAuxiliary: false });
       renderOperator();
-    }, 5000);
+      refreshAuxiliaryData().then(() => renderOperator()).catch(() => {});
+      showToast("Demo data reset.");
+    });
+    const fleetCountryFilter = qs("fleetCountryFilter");
+    if (fleetCountryFilter) {
+      fleetCountryFilter.addEventListener("change", async event => {
+        state.countryFilter = event.target.value || "all";
+        await refreshData({ includeAuxiliary: false });
+        renderOperator();
+        refreshAuxiliaryData().then(() => renderOperator()).catch(() => {});
+      });
+    }
+    setInterval(async () => {
+      await refreshData({ includeAuxiliary: false });
+      renderOperator();
+    }, 15000);
+    if (typeof setupVehicleModal === 'function') setupVehicleModal();
   }
 
   function initOperatorTabs() {
@@ -397,12 +652,13 @@
   function activateOperatorTab(tabId) {
     const target = qs(tabId);
     if (!target) return;
+    state.activeOperatorTab = tabId;
     document.querySelectorAll(".ops-tabs button").forEach(item => item.classList.toggle("active", item.dataset.opsTab === tabId));
     document.querySelectorAll(".ops-tab-panel").forEach(item => item.classList.toggle("active", item.id === tabId));
+    renderOperator();
     setTimeout(() => {
       Object.values(state.maps).forEach(map => {
         try { map.invalidateSize(); } catch (e) {}
       });
     }, 100);
   }
-

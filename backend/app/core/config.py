@@ -32,14 +32,30 @@ def default_route() -> str:
 
 
 def route_names() -> Dict[str, str]:
+    """Get route names from config. Returns empty dict if not configured."""
+    routes = config_value("routes", default={})
+    if not routes or not isinstance(routes, dict):
+        return {}
     return {
-        route: details["name"]
-        for route, details in config_value("routes", default={}).items()
+        route: details.get("name", route)
+        for route, details in routes.items()
+        if isinstance(details, dict)
     }
 
 
 def route_polylines() -> Dict[str, List[Tuple[float, float]]]:
+    """Get route polylines from config. Returns empty dict if not configured."""
+    routes = config_value("routes", default={})
+    if not routes or not isinstance(routes, dict):
+        return {}
     return {
-        route: [(float(lat), float(lon)) for lat, lon in details["polyline"]]
-        for route, details in config_value("routes", default={}).items()
+        route: [(float(lat), float(lon)) for lat, lon in details.get("polyline", [])]
+        for route, details in routes.items()
+        if isinstance(details, dict) and details.get("polyline")
     }
+
+
+def is_demo_mode() -> bool:
+    """Check if the application should run in demo mode."""
+    import os
+    return os.environ.get("DEMO_MODE", "true").lower() in ("1", "true", "yes")

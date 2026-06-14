@@ -68,11 +68,20 @@
 .app-screen {
   height: 100%;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "header"
+    "search"
+    "content"
+    "nav";
   background: var(--wash);
+}
+.app-screen.trip-search-collapsed {
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
 .mobile-header {
+  grid-area: header;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -80,20 +89,43 @@
 }
 .mobile-header h1 { font-size: 24px; }
 .tab-panel {
+  grid-area: content;
   display: none;
   overflow: auto;
-  padding: 8px 18px 18px;
+  min-height: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  padding: 4px 18px 18px;
 }
-.tab-panel.active { display: block; }
+#mapTab {
+  overflow: hidden;
+}
+#homeTab.active,
+#mapTab.active,
+#routesTab.active,
 #chatTab.active {
   display: flex;
   flex-direction: column;
 }
+.tab-panel.active { display: flex; }
+#chatTab.active {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 
-/* Make map tab full-screen within phone frame */
+#mapTab > div[style*="position: relative"] {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+}
+
 .tab-panel#mapTab .live-map {
-  height: calc(100vh - 180px);
-  min-height: 450px;
+  flex: 1 1 auto;
+  width: 100%;
+  height: auto;
+  min-height: 0;
 }
 
 .hero-card, .quick-grid article, .vehicle-card, .route-card, .chat-header {
@@ -195,25 +227,61 @@
 }
 
 .trip-search-panel button#findPuvBtn {
-  margin-top: 14px;
-  align-self: center;
-  min-width: 160px;
-  padding: 14px;
+  margin-top: 4px;
+  width: 100%;
+  padding: 10px;
 }
 
 .trip-search-panel {
-  margin: 8px 18px 14px;
-  padding: 14px;
+  grid-area: search;
+  margin: 0 18px 0;
+  padding: 12px;
   display: grid;
-  gap: 12px;
+  gap: 8px;
   background: rgba(255, 255, 255, 0.94);
   border: 1px solid var(--line);
   border-radius: 8px;
   box-shadow: 0 12px 28px rgba(24, 37, 45, 0.08);
 }
-.trip-fields {
+.trip-search-panel.is-collapsed {
+  padding: 10px 12px;
+  gap: 0;
+}
+.trip-search-body {
   display: grid;
   gap: 8px;
+}
+.trip-search-panel.is-collapsed .trip-search-body {
+  display: none;
+}
+.trip-fields {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.trip-fields .input-col {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+.swap-trip {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  color: var(--fg);
+  padding: 0;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.swap-trip:active {
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 .trip-fields label { color: var(--ink); }
 .trip-fields label {
@@ -221,7 +289,7 @@
 }
 .place-search-results {
   position: absolute;
-  z-index: 800;
+  z-index: 1001;
   top: calc(100% + 4px);
   left: 0;
   right: 0;
@@ -273,8 +341,70 @@
   margin-bottom: 12px;
 }
 .route-directory-sheet {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
+  min-height: 0;
+  flex: 1 1 auto;
+  height: 100%;
+}
+
+.trip-search-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+}
+
+.trip-search-heading h2 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.trip-collapse-toggle {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--teal-dark);
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.trip-collapse-toggle:hover {
+  background: var(--mint);
+  border-color: var(--teal);
+}
+
+.trip-search-heading .country-search-wrapper {
+  width: 150px;
+  flex: 0 0 150px;
+}
+
+.trip-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.trip-actions .button {
+  flex: 1;
+  padding: 10px;
+  margin: 0;
+}
+
+.trip-actions .swap-trip {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  margin: 0;
 }
 .sheet-handle {
   width: 44px;
@@ -355,6 +485,27 @@ summary.route-card-head {
 .vehicle-card p { font-size: 13px; margin: 4px 0; }
 .vehicle-card .route-name { color: var(--fg); font-weight: 500; }
 .vehicle-card .trip-meta { color: var(--muted); margin-top: 8px; }
+.trip-detail-grid {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  gap: 4px 8px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+.trip-detail-grid span {
+  color: var(--muted);
+}
+.trip-detail-grid strong {
+  color: var(--ink);
+  font-weight: 800;
+}
+.multi-puv-leg {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.multi-puv-leg + .multi-puv-leg {
+  margin-top: 2px;
+}
 .leg-info {
   display: flex;
   flex-direction: column;
@@ -378,20 +529,9 @@ summary.route-card-head {
   justify-items: end;
   gap: 8px;
 }
-.mini-action {
-  min-height: 30px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
-  color: var(--teal-dark);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 900;
-  padding: 0 10px;
-}
 
-.route-card { padding: 14px; }
-.route-card h3 { font-size: 16px; }
+.route-card { padding: 14px; overflow: hidden; }
+.route-card h3 { font-size: 16px; word-break: break-word; }
 .route-card ol {
   margin: 10px 0 0;
   padding-left: 20px;
@@ -433,12 +573,18 @@ summary.route-card-head {
 .send-button { border-radius: 8px; }
 
 .mobile-nav {
+  grid-area: nav;
+  align-self: end;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   padding: 8px;
+  min-height: 64px;
+  max-height: 72px;
   background: #fff;
   border-top: 1px solid var(--line);
+  z-index: 30;
+  box-shadow: 0 -10px 30px rgba(24, 37, 45, 0.08);
 }
 .mobile-nav button {
   border: 0;
@@ -448,6 +594,7 @@ summary.route-card-head {
   padding: 7px 4px;
   font-size: 12px;
   font-weight: 900;
+  min-height: 48px;
 }
 .mobile-nav button.active { background: var(--mint); color: var(--teal-dark); }
 .nav-icon { display: block; font-size: 15px; margin-bottom: 2px; }
@@ -462,21 +609,30 @@ summary.route-card-head {
     border-radius: 0;
   }
   .tab-panel#mapTab .live-map {
-    height: calc(100vh - 150px);
-    min-height: 380px;
+    height: auto;
+    min-height: 0;
   }
   .trip-search-panel {
     margin: 8px 12px 12px;
     border-radius: 20px 20px 16px 16px;
   }
   .route-directory-sheet {
-    position: sticky;
-    bottom: 0;
     margin: 0 -6px;
     padding: 14px 12px 18px;
     border-radius: 22px 22px 0 0;
     box-shadow: 0 -18px 40px rgba(24, 37, 45, 0.12);
     background: rgba(255, 255, 255, 0.98);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1;
+    height: 100%;
+  }
+  .route-list {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding-bottom: 8px;
   }
   .route-directory-controls {
     grid-template-columns: 1fr;
@@ -486,5 +642,7 @@ summary.route-card-head {
   .route-zone-header {
     flex-direction: column;
   }
-}
+  .chat-transcript {
+    min-height: 260px;
+  }
 }

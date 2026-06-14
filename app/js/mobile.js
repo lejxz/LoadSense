@@ -41,6 +41,9 @@
       button.addEventListener("click", () => {
         state.selectedRoute = button.dataset.selectRoute;
         state.tripSuggestions = [];
+        activateMobileTab("mapTab");
+        drawMap("mobileMap", state.selectedRoute);
+        setTimeout(() => fitRoute("mobileMap", state.selectedRoute), 100);
         renderMobile();
       });
     });
@@ -52,6 +55,26 @@
     });
   }
 
+  function setTripSearchCollapsed(collapsed) {
+    const panel = qs("tripSearchPanel");
+    const appScreen = qs("appScreen");
+    const toggle = qs("toggleTripSearch");
+    if (!panel) return;
+    state.tripSearchCollapsed = Boolean(collapsed);
+    panel.classList.toggle("is-collapsed", state.tripSearchCollapsed);
+    appScreen?.classList.toggle("trip-search-collapsed", state.tripSearchCollapsed);
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", String(!state.tripSearchCollapsed));
+      toggle.title = state.tripSearchCollapsed ? "Expand search" : "Collapse search";
+      const icon = toggle.querySelector("[data-trip-toggle-icon]");
+      if (icon) icon.textContent = state.tripSearchCollapsed ? "+" : "−";
+    }
+    setTimeout(() => {
+      try { state.maps.mobileMap?.invalidateSize(); } catch (e) {}
+      if (state.selectedRoute) fitRoute("mobileMap", state.selectedRoute);
+    }, 120);
+  }
+
   function activateMobileTab(tabId) {
     const target = qs(tabId);
     if (!target) return;
@@ -59,7 +82,10 @@
     document.querySelectorAll(".tab-panel").forEach(item => item.classList.toggle("active", item.id === tabId));
     const tripSearch = qs("tripSearchPanel");
     if (tripSearch) {
-      tripSearch.classList.toggle("hidden", tabId !== "homeTab");
+      tripSearch.classList.toggle("hidden", !["homeTab", "mapTab"].includes(tabId));
+      if (tabId === "mapTab" && !state.tripSearchManuallyChanged) {
+        setTripSearchCollapsed(true);
+      }
     }
     setTimeout(() => {
       try { state.maps.mobileMap?.invalidateSize(); } catch (e) {}
@@ -73,11 +99,6 @@
       mobileRouteTitle.textContent = state.tripSuggestions[0]
         ? `Best: Route ${state.tripSuggestions[0].route}`
         : selected ? `Nearest: Route ${selected}` : `Select a route`;
-    }
-    const mapRoute = qs("mapRoute");
-    if (mapRoute) {
-      mapRoute.innerHTML = selectOptions(selected);
-      mapRoute.value = selected;
     }
     updatePlaceDatalists();
 
@@ -172,7 +193,6 @@
     renderRouteDirectory();
     renderDestinationConfirm();
     drawMap("mobileMap", selected);
-    setTimeout(() => fitRoute("mobileMap", selected), 100);
   }
 
   function renderDestinationConfirm() {
@@ -217,69 +237,111 @@
     initMobileTabs();
     bindPlaceSearch("originInput", "originSearchResults");
     bindPlaceSearch("destinationInput", "destinationSearchResults");
-    bindPlaceSearch("mapOriginInput", "mapOriginSearchResults");
-    bindPlaceSearch("mapDestinationInput", "mapDestinationSearchResults");
-
-    const syncInputs = (sourceId, targetId) => {
-      const source = qs(sourceId);
-      const target = qs(targetId);
-      if (source && target) {
-        source.addEventListener("input", () => target.value = source.value);
-        source.addEventListener("change", () => target.value = source.value);
-      }
-    };
-    syncInputs("originInput", "mapOriginInput");
-    syncInputs("mapOriginInput", "originInput");
-    syncInputs("destinationInput", "mapDestinationInput");
-    syncInputs("mapDestinationInput", "destinationInput");
-
-    const mapFindPuvBtn = qs("mapFindPuvBtn");
-    if (mapFindPuvBtn) {
-      mapFindPuvBtn.addEventListener("click", async () => {
-        await requestTripSuggestions(qs("mapDestinationInput")?.value.trim());
-      });
-    }
+    await loadCountries();
+    renderSearchableSelect(
+      "mobileCountrySelect",
+      state.countries.map(country => ({ value: country.code, label: country.name })),
+      state.countryFilter,
+      async value => {
+        state.countryFilter = value || "all";
+        state.cityFilter = "all";
+        state.regionFilter = "all";
+        state.selectedRoute = "";
+        state.tripSuggestions = [];
+        state.tripMatches = [];
+        state.chatContext = { route: "", vehicleId: "" };
+        await refreshData({ includeAuxiliary: false });
+        renderMobile();
+      },
+      { placeholder: "Country", label: "Country", compact: true }
+    );
 
     qs("loginForm").addEventListener("submit", async event => {
       event.preventDefault();
-      // Login only collects mobile number; route selection moved to Home tab
       qs("loginScreen").classList.add("hidden");
       qs("appScreen").classList.remove("hidden");
-      await refreshData();
-      // attempt to detect user location but do not auto-select route on first load
+      
+      const startNext = async () => {
+        await refreshData({ includeAuxiliary: false });
+        renderMobile();
+      };
+      
       try {
         if (navigator.geolocation) {
-          navigator.geolocation.getCurrentPosition(async pos => {
+          navigator.geolocation.getCurrentPosition(pos => {
             state.lastPosition = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-            await refreshData();
-            renderMobile();
-          }, async () => { await refreshData(); renderMobile(); }, { timeout: 3000 });
+            startNext();
+          }, () => { startNext(); }, { timeout: 3000 });
         } else {
-          await refreshData();
-          renderMobile();
+          startNext();
         }
       } catch (e) {
-        await refreshData();
-        renderMobile();
+        startNext();
       }
     });
-    qs("mapRoute").addEventListener("change", event => {
-      state.selectedRoute = event.target.value;
-      renderMobile();
-    });
-    const cityFilter = qs("cityFilter");
-    if (cityFilter) {
-      cityFilter.addEventListener("change", event => {
+
+    const regionFilter = qs("cityFilter");
+    if (regionFilter) {
+      regionFilter.addEventListener("change", event => {
         state.cityFilter = event.target.value || "all";
-        renderRouteDirectory();
+        state.regionFilter = state.cityFilter;
+        setTimeout(() => {
+          renderRouteDirectory();
+        }, 0);
       });
     }
+
+    // Wire up country change to populate city dropdown from API
+    const mobileCountryContainer = qs("mobileCountrySelect");
+    if (mobileCountryContainer) {
+      const origOnSelect = async (value) => {
+        state.countryFilter = value || "all";
+        state.cityFilter = "all";
+        state.regionFilter = "all";
+        state.selectedRoute = "";
+        state.tripSuggestions = [];
+        state.tripMatches = [];
+        state.chatContext = { route: "", vehicleId: "" };
+        try {
+          const regionResult = await getJson(`/regions?country=${encodeURIComponent(value || '')}`);
+          const regions = regionResult.regions || [];
+          const regionDropdown = qs("cityFilter");
+          if (regionDropdown) {
+            regionDropdown.innerHTML = `<option value="all">All regions</option>` +
+              regions.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+            regionDropdown.value = 'all';
+          }
+        } catch (e) {
+          const regionDropdown = qs("cityFilter");
+          if (regionDropdown) {
+            const routeRegions = [...new Set(state.routes
+              .filter(r => !value || value === 'all' || r.country === value)
+              .map(r => r.region).filter(Boolean))];
+            regionDropdown.innerHTML = `<option value="all">All regions</option>` +
+              routeRegions.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+            regionDropdown.value = 'all';
+          }
+        }
+        await refreshData({ includeAuxiliary: false });
+        renderMobile();
+      };
+      // Re-render the country select with city-loading wired in
+      renderSearchableSelect(
+        "mobileCountrySelect",
+        state.countries.map(country => ({ value: country.code, label: country.name })),
+        state.countryFilter,
+        origOnSelect,
+        { placeholder: "Country", label: "Country", compact: true }
+      );
+    }
+
     const findPuvBtn = qs("findPuvBtn");
     if (findPuvBtn) {
       findPuvBtn.addEventListener("click", async () => {
         await requestTripSuggestions();
       });
     }
+
     const swapTrip = qs("swapTrip");
     if (swapTrip) {
       swapTrip.addEventListener("click", () => {
@@ -299,33 +361,59 @@
         }
       });
     }
-    qs("refreshMobile").addEventListener("click", async () => {
-      await refreshData();
-      renderMobile();
-    });
-    qs("routeSearch").addEventListener("input", event => {
-      state.routeQuery = event.target.value.trim();
-      renderRouteDirectory();
-    });
-    // setup recenter buttons and geolocation watch
+
+    const toggleTripSearch = qs("toggleTripSearch");
+    if (toggleTripSearch) {
+      toggleTripSearch.addEventListener("click", () => {
+        state.tripSearchManuallyChanged = true;
+        setTripSearchCollapsed(!state.tripSearchCollapsed);
+      });
+      setTripSearchCollapsed(false);
+    }
+
+    const refreshMobile = qs("refreshMobile");
+    if (refreshMobile) {
+      refreshMobile.addEventListener("click", async () => {
+        await refreshData({ includeAuxiliary: false });
+        renderMobile();
+      });
+    }
+
+    const routeSearch = qs("routeSearch");
+    if (routeSearch) {
+      routeSearch.addEventListener("input", event => {
+        state.routeQuery = event.target.value.trim();
+        renderRouteDirectory();
+      });
+    }
+    // setup recenter buttons; map.js owns the location watch to avoid duplicate refresh loops.
     setupRecenterButtons();
-    try {
-      if (navigator.geolocation) {
-        state.geoWatchId = navigator.geolocation.watchPosition(pos => {
-          state.lastPosition = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-          refreshData().then(() => renderMobile());
-        }, err => {
-          // ignore errors for watch
-        }, { enableHighAccuracy: false, maximumAge: 5000, timeout: 5000 });
+    const chatForm = qs("chatForm");
+    if (chatForm) {
+      chatForm.addEventListener("submit", async event => {
+        event.preventDefault();
+        const input = qs("chatInput");
+        const query = input.value.trim();
+        if (!query) return;
+        input.value = "";
+        await askMobileChat(query);
+      });
+    }
+    // Dirty-checking: only re-render if data actually changed
+    let _lastMobileHash = '';
+    setInterval(async () => {
+      if (!qs("appScreen").classList.contains("hidden")) {
+        await refreshData({ includeAuxiliary: false });
+        const newHash = JSON.stringify({
+          v: state.vehicles.map(v => v.vehicle_id + v.latitude + v.longitude + v.tier + v.occupancy),
+          r: state.routes.map(r => r.route),
+          s: state.selectedRoute
+        });
+        if (newHash !== _lastMobileHash) {
+          _lastMobileHash = newHash;
+          renderMobile();
+        }
       }
-    } catch (e) {}
-    qs("chatForm").addEventListener("submit", async event => {
-      event.preventDefault();
-      const input = qs("chatInput");
-      const query = input.value.trim();
-      if (!query) return;
-      input.value = "";
-      await askMobileChat(query);
-    });
+    }, 30000);
   }
 
