@@ -533,7 +533,18 @@
       || state.routes.find(route => route.route === routeId);
   }
 
+  function populateVehicleTypes() {
+    const typeSelect = qs("vehType");
+    if (!typeSelect) return;
+    const types = [...new Set(state.routes.map(r => r.route_type || r.type).filter(Boolean))];
+    if (!types.length) types.push("Jeepney", "Bus", "Minibus", "Van", "Other");
+    const currentValue = typeSelect.value;
+    typeSelect.innerHTML = types.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+    if (types.includes(currentValue)) typeSelect.value = currentValue;
+  }
+
   function syncVehicleTypeWithRoute() {
+    if (qs("vehType") && qs("vehType").options.length === 0) populateVehicleTypes();
     const route = selectedVehicleRoute();
     const type = route?.route_type || route?.type || "";
     const typeSelect = qs("vehType");

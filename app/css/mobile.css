@@ -115,7 +115,7 @@
   min-height: 0;
 }
 
-#mapTab > div[style*="position: relative"] {
+#mapTab > div.relative {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
@@ -646,3 +646,9 @@ summary.route-card-head {
     min-height: 260px;
   }
 }
+
+/* ── Utility Classes ────────────────────────────────────────────── */
+.m-0 { margin: 0; }
+.p-0 { padding: 0; }
+.mb-0 { margin-bottom: 0; }
+.relative { position: relative; }

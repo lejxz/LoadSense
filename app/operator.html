@@ -80,7 +80,7 @@
           </div>
         </div>
         <div id="routesAdmin" class="routes-admin">
-          <div style="margin-bottom: 16px;">
+          <div class="mb-16">
             <button id="addRouteBtn" class="button primary small" type="button">Add Route</button>
           </div>
           <div class="route-io-actions">
@@ -104,9 +104,9 @@
           </div>
           <textarea id="importRoutes" class="import-routes-textarea" placeholder='Paste JSON array of routes here (route,name,polyline)'></textarea>
 
-          <div class="routes-admin-search" style="margin: 10px 0 4px; display: flex; gap: 8px; align-items: center;">
-            <input id="adminRouteSearch" placeholder="Search routes by name or ID…" style="flex: 8; margin: 0;" />
-            <select id="regionFilter" style="flex: 2; margin: 0;"></select>
+          <div class="routes-admin-search">
+            <input id="adminRouteSearch" class="flex-8 m-0" placeholder="Search routes by name or ID…" />
+            <select id="regionFilter" class="flex-2 m-0"></select>
           </div>
           <div id="routesTable" class="routes-table"></div>
         </div>
@@ -268,7 +268,7 @@
                 <button id="addRoutePoint" class="button secondary" type="button">+ Add Coordinate</button>
               </div>
 
-              <div class="route-form-actions" style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border);">
+              <div class="route-form-actions route-form-actions-footer">
                 <button id="previewRoute" class="button secondary" type="button">Preview on Map</button>
                 <button id="saveRoute" class="button primary" type="button">Save route</button>
                 <button id="clearRoute" class="button secondary" type="button">Clear</button>
@@ -301,11 +301,6 @@
               <label>
                 Vehicle Type
                 <select id="vehType" required>
-                  <option value="Jeepney">Jeepney</option>
-                  <option value="Bus">Bus</option>
-                  <option value="Van">Van</option>
-                  <option value="Minibus">Minibus</option>
-                  <option value="Other">Other</option>
                 </select>
               </label>
               <label>
@@ -332,7 +327,7 @@
                 Max Occupancy
                 <input id="vehMaxOccupancy" type="number" required placeholder="e.g. 20" />
               </label>
-              <div class="route-form-actions" style="margin-top: 16px;">
+              <div class="route-form-actions mt-16">
                 <button type="submit" class="button primary">Save Vehicle</button>
               </div>
             </form>
@@ -348,7 +343,7 @@
           </div>
           <div class="modal-body">
             <div id="routePreviewMap" class="live-map route-preview-map"></div>
-            <p id="routePreviewMeta" class="muted" style="margin-top: 12px;"></p>
+            <p id="routePreviewMeta" class="muted mt-12"></p>
           </div>
         </div>
       </div>

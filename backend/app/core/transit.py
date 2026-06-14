@@ -32,60 +32,6 @@ def _stop(name: str, latitude: float, longitude: float) -> dict[str, Any]:
     return {"name": name, "latitude": latitude, "longitude": longitude}
 
 
-PLACE_DATABASE: list[dict[str, Any]] = [
-    {"name": "Cebu City", "city": "Cebu", "latitude": 10.3157, "longitude": 123.8854, "aliases": ["cebu", "cebu city"], "kind": "city"},
-    {"name": "Mandaue City", "city": "Cebu", "latitude": 10.3333, "longitude": 123.9333, "aliases": ["mandaue", "mandaue city"], "kind": "city"},
-    {"name": "Lapu-Lapu City", "city": "Cebu", "latitude": 10.3103, "longitude": 123.9494, "aliases": ["lapu lapu", "lapu-lapu", "mactan"], "kind": "city"},
-    {"name": "Talisay City Cebu", "city": "Cebu", "latitude": 10.2447, "longitude": 123.8494, "aliases": ["talisay", "talisay cebu", "talisay city"], "kind": "city"},
-    {"name": "Minglanilla", "city": "Cebu", "latitude": 10.2447, "longitude": 123.7964, "aliases": ["minglanilla cebu", "mingla"], "kind": "town"},
-    {"name": "Naga City Cebu", "city": "Cebu", "latitude": 10.2090, "longitude": 123.7580, "aliases": ["naga", "naga cebu", "naga city"], "kind": "city"},
-    {"name": "San Fernando Cebu", "city": "Cebu", "latitude": 10.1625, "longitude": 123.7076, "aliases": ["san fernando", "san fernando cebu"], "kind": "town"},
-    {"name": "Carcar City", "city": "Cebu", "latitude": 10.1061, "longitude": 123.6402, "aliases": ["carcar", "carcar cebu"], "kind": "city"},
-    {"name": "Consolacion", "city": "Cebu", "latitude": 10.3776, "longitude": 123.9575, "aliases": ["consolacion cebu"], "kind": "town"},
-    {"name": "Liloan", "city": "Cebu", "latitude": 10.3991, "longitude": 123.9992, "aliases": ["liloan cebu"], "kind": "town"},
-    {"name": "Compostela Cebu", "city": "Cebu", "latitude": 10.4550, "longitude": 124.0106, "aliases": ["compostela"], "kind": "town"},
-    {"name": "Danao City", "city": "Cebu", "latitude": 10.5208, "longitude": 124.0275, "aliases": ["danao", "danao cebu"], "kind": "city"},
-    {"name": "Cordova Cebu", "city": "Cebu", "latitude": 10.2523, "longitude": 123.9495, "aliases": ["cordova"], "kind": "town"},
-    {"name": "Toledo City", "city": "Cebu", "latitude": 10.3773, "longitude": 123.6386, "aliases": ["toledo", "toledo cebu"], "kind": "city"},
-    {"name": "Balamban", "city": "Cebu", "latitude": 10.5039, "longitude": 123.7153, "aliases": ["balamban cebu"], "kind": "town"},
-    {"name": "Dumanjug", "city": "Cebu", "latitude": 10.0570, "longitude": 123.4365, "aliases": ["dumanjug cebu"], "kind": "town"},
-    {"name": "Barili", "city": "Cebu", "latitude": 10.1150, "longitude": 123.5103, "aliases": ["barili cebu"], "kind": "town"},
-    {"name": "Moalboal", "city": "Cebu", "latitude": 9.9436, "longitude": 123.3996, "aliases": ["moalboal cebu"], "kind": "town"},
-    {"name": "Samboan", "city": "Cebu", "latitude": 9.5276, "longitude": 123.3068, "aliases": ["samboan cebu"], "kind": "town"},
-    {"name": "Oslob", "city": "Cebu", "latitude": 9.5211, "longitude": 123.4315, "aliases": ["oslob cebu"], "kind": "town"},
-    {"name": "Bogo City", "city": "Cebu", "latitude": 11.0517, "longitude": 124.0055, "aliases": ["bogo", "bogo cebu"], "kind": "city"},
-    {"name": "Daanbantayan", "city": "Cebu", "latitude": 11.2468, "longitude": 124.0160, "aliases": ["daan bantayan", "daanbantayan cebu"], "kind": "town"},
-    {"name": "Basak Cebu", "city": "Cebu City", "latitude": 10.2847, "longitude": 123.8647, "aliases": ["basak", "basak cebu", "basak pardo", "basak cebu city"], "kind": "barangay"},
-    {"name": "Basak Lapu-Lapu", "city": "Lapu-Lapu City", "latitude": 10.2936, "longitude": 123.9634, "aliases": ["basak lapu lapu", "basak mactan"], "kind": "barangay"},
-    {"name": "Lipata", "city": "Minglanilla", "latitude": 10.2452, "longitude": 123.7828, "aliases": ["lipata minglanilla", "lipata cebu"], "kind": "barangay"},
-    {"name": "Pardo", "city": "Cebu City", "latitude": 10.2822, "longitude": 123.8527, "aliases": ["pardo cebu"], "kind": "barangay"},
-    {"name": "Bulacao", "city": "Cebu City", "latitude": 10.2723, "longitude": 123.8500, "aliases": ["bulacao cebu"], "kind": "barangay"},
-    {"name": "Punta Princesa", "city": "Cebu City", "latitude": 10.2878, "longitude": 123.8748, "aliases": ["punta", "punta princesa cebu"], "kind": "barangay"},
-    {"name": "Tabunok", "city": "Talisay City", "latitude": 10.2651, "longitude": 123.8429, "aliases": ["talisay tabunok", "tabunok talisay"], "kind": "barangay"},
-    {"name": "Guadalupe Cebu", "city": "Cebu City", "latitude": 10.3140, "longitude": 123.8830, "aliases": ["guadalupe", "guadalupe cebu"], "kind": "barangay"},
-    {"name": "Lahug", "city": "Cebu City", "latitude": 10.3370, "longitude": 123.8995, "aliases": ["lahug cebu"], "kind": "barangay"},
-    {"name": "Talamban", "city": "Cebu City", "latitude": 10.3700, "longitude": 123.9120, "aliases": ["talamban cebu"], "kind": "barangay"},
-    {"name": "Colon Street", "city": "Cebu City", "latitude": 10.2964, "longitude": 123.8997, "aliases": ["colon"], "kind": "landmark"},
-    {"name": "Carbon Market", "city": "Cebu City", "latitude": 10.2927, "longitude": 123.9006, "aliases": ["carbon", "carbon market"], "kind": "landmark"},
-    {"name": "Fuente Osmena Circle", "city": "Cebu City", "latitude": 10.3093, "longitude": 123.8930, "aliases": ["fuente", "fuente osmena"], "kind": "landmark"},
-    {"name": "Cebu IT Park", "city": "Cebu City", "latitude": 10.3306, "longitude": 123.9067, "aliases": ["it park", "cebu it park"], "kind": "landmark"},
-    {"name": "South Bus Terminal Cebu", "city": "Cebu City", "latitude": 10.2948, "longitude": 123.8938, "aliases": ["south bus", "south bus terminal", "cebu south bus terminal"], "kind": "terminal"},
-    {"name": "North Bus Terminal Cebu", "city": "Mandaue City", "latitude": 10.3358, "longitude": 123.9324, "aliases": ["north bus", "north bus terminal", "cebu north bus terminal"], "kind": "terminal"},
-]
-
-
-LANDMARKS: list[dict[str, Any]] = [
-    {"name": "Ayala Center Cebu", "city": "Cebu City", "latitude": 10.3173, "longitude": 123.9058, "aliases": ["ayala", "ayala center"]},
-    {"name": "SM City Cebu", "city": "Cebu City", "latitude": 10.3115, "longitude": 123.9183, "aliases": ["sm cebu", "sm city"]},
-    {"name": "Parkmall Mandaue", "city": "Mandaue", "latitude": 10.3337, "longitude": 123.9336, "aliases": ["parkmall"]},
-    {"name": "SM Seaside City Cebu", "city": "Cebu City", "latitude": 10.2810, "longitude": 123.8817, "aliases": ["sm seaside", "seaside"]},
-    {"name": "Changi Airport", "city": "Singapore", "latitude": 1.3574, "longitude": 103.9879, "aliases": ["changi", "singapore airport"]},
-    {"name": "Marina Bay", "city": "Singapore", "latitude": 1.2830, "longitude": 103.8600, "aliases": ["marina bay sands", "mbs"]},
-    {"name": "Central Hong Kong", "city": "Hong Kong", "latitude": 22.2819, "longitude": 114.1582, "aliases": ["central", "hong kong central"]},
-    {"name": "Shinjuku Station", "city": "Tokyo", "latitude": 35.6909, "longitude": 139.7003, "aliases": ["shinjuku"]},
-]
-
-
 ROUTE_METADATA: dict[str, dict[str, Any]] = {}
 
 
@@ -273,17 +219,6 @@ def search_places(
 
 def _local_places(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     places: list[dict[str, Any]] = []
-    route_countries = {str(route.get("country") or "PH") for route in routes if route.get("country")}
-    for place in PLACE_DATABASE:
-        place_country = str(place.get("country", "PH"))
-        if route_countries and place_country not in route_countries:
-            continue
-        places.append({**place, "country": place_country, "source": "local_place"})
-    for landmark in LANDMARKS:
-        landmark_country = str(landmark.get("country", "PH"))
-        if route_countries and landmark_country not in route_countries:
-            continue
-        places.append({**landmark, "country": landmark_country, "source": "local_landmark"})
     for route in routes:
         route_id = str(route.get("route") or "")
         route_name = str(route.get("name") or route_id)

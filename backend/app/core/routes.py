@@ -12,51 +12,7 @@ from backend.app.db import sqlite_store
 ROUTE_NAMES = route_names()
 COUNTRY_DATA_DIR = repo_path("data/countries")
 
-DEMO_CEBU_ROUTES: dict[str, dict] = {
-    "44": {
-        "name": "Minglanilla - Basak - Cebu City",
-        "stops": [
-            {"name": "Minglanilla", "latitude": 10.2447, "longitude": 123.7964},
-            {"name": "Tabunok", "latitude": 10.2651, "longitude": 123.8429},
-            {"name": "Basak Cebu", "latitude": 10.2847, "longitude": 123.8647},
-            {"name": "Colon Street", "latitude": 10.2964, "longitude": 123.8997},
-        ],
-    },
-    "45": {
-        "name": "Minglanilla - Basak - SM City Cebu",
-        "stops": [
-            {"name": "Minglanilla", "latitude": 10.2447, "longitude": 123.7964},
-            {"name": "Tabunok", "latitude": 10.2651, "longitude": 123.8429},
-            {"name": "Basak Cebu", "latitude": 10.2847, "longitude": 123.8647},
-            {"name": "SM City Cebu", "latitude": 10.3115, "longitude": 123.9183},
-        ],
-    },
-    "10M": {
-        "name": "Basak - Ayala - SM City Cebu",
-        "stops": [
-            {"name": "Basak Cebu", "latitude": 10.2847, "longitude": 123.8647},
-            {"name": "Colon Street", "latitude": 10.2964, "longitude": 123.8997},
-            {"name": "Ayala Center Cebu", "latitude": 10.3173, "longitude": 123.9058},
-            {"name": "SM City Cebu", "latitude": 10.3115, "longitude": 123.9183},
-        ],
-    },
-    "04L": {
-        "name": "Lahug - Ayala - SM City Cebu",
-        "stops": [
-            {"name": "Lahug", "latitude": 10.3370, "longitude": 123.8995},
-            {"name": "Ayala Center Cebu", "latitude": 10.3173, "longitude": 123.9058},
-            {"name": "SM City Cebu", "latitude": 10.3115, "longitude": 123.9183},
-        ],
-    },
-}
-
-
 def get_route_stops(route: str) -> List[dict]:
-    if route in DEMO_CEBU_ROUTES:
-        return [
-            {"stop_id": index, **stop}
-            for index, stop in enumerate(DEMO_CEBU_ROUTES[route]["stops"])
-        ]
     config_polylines = route_polylines()
     points = sqlite_store.load_route_polyline(route) or config_polylines.get(route) or config_polylines.get(default_route()) or [(10.3157, 123.8854), (10.3308, 123.8990)]
     if len(points) > 8:
@@ -75,12 +31,9 @@ def get_route_stops(route: str) -> List[dict]:
 
 def list_routes() -> List[dict]:
     db_routes = sqlite_store.load_routes()
-    demo_routes = _demo_routes()
     file_routes = _country_file_routes(exclude_country="PH")
     if db_routes:
-        demo_ids = {route["route"] for route in demo_routes}
-        db_routes = [route for route in db_routes if route.get("route") not in demo_ids]
-        seen = {route.get("route") for route in db_routes} | demo_ids | {route.get("route") for route in file_routes}
+        seen = {route.get("route") for route in db_routes} | {route.get("route") for route in file_routes}
         fallback_routes = []
         _config_polylines = route_polylines()
         for route, points in _config_polylines.items():
@@ -98,9 +51,9 @@ def list_routes() -> List[dict]:
                     "landmarks": [stop["name"] for stop in stops[:6]],
                     "endpoints": [stops[0]["name"], stops[-1]["name"]] if len(stops) >= 2 else [],
                 })
-        return demo_routes + db_routes + file_routes + fallback_routes
+        return db_routes + file_routes + fallback_routes
     _config_polylines = route_polylines()
-    return demo_routes + file_routes + [
+    return file_routes + [
         {
             "route": route,
             "name": ROUTE_NAMES.get(route, route),
@@ -207,39 +160,6 @@ def _load_geojson_routes(path: Path, country: str, max_points: int = 120) -> Lis
         })
     return routes
 
-
-def _demo_routes() -> List[dict]:
-    routes: List[dict] = []
-    for route, details in DEMO_CEBU_ROUTES.items():
-        stops = get_route_stops(route)
-        routes.append({
-            "route": route,
-            "name": details["name"],
-            "country": "PH",
-            "tag": route,
-            "route_type": "Jeepney",
-            "origin_name": stops[0]["name"],
-            "destination_name": stops[-1]["name"],
-            "stops": stops,
-            "points": [
-                {
-                    "sequence_order": index + 1,
-                    "latitude": stop["latitude"],
-                    "longitude": stop["longitude"],
-                    "point_type": "origin" if index == 0 else "end_of_route" if index == len(stops) - 1 else "alight_or_board_stop",
-                    "label": stop["name"],
-                    "name": stop["name"],
-                }
-                for index, stop in enumerate(stops)
-            ],
-            "polyline": [{"latitude": stop["latitude"], "longitude": stop["longitude"]} for stop in stops],
-            "city": "Cebu City",
-            "zone": "Cebu City",
-            "type": "Jeepney",
-            "landmarks": [stop["name"] for stop in stops],
-            "endpoints": [stops[0]["name"], stops[-1]["name"]],
-        })
-    return routes
 
 
 def nearest_stop_id(route: str, latitude: float, longitude: float) -> int:
