@@ -641,6 +641,12 @@ function findNearestRoute(lat, lon) {
       renderOperator();
     }, 15000);
     if (typeof setupVehicleModal === 'function') setupVehicleModal();
+    
+    ['regionFilter', 'fleetRouteFilter', 'fleetTierFilter', 'routeType', 'vehType', 'vehRegion', 'vehRoute'].forEach(id => {
+      if (typeof window.makeSelectSearchable === 'function') {
+        window.makeSelectSearchable(id);
+      }
+    });
   }
 
   function initOperatorTabs() {

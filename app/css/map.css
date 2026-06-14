@@ -266,20 +266,81 @@
 
 .map-controls-bar {
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  padding: 0;
+  margin: 0 16px 24px !important;
+}
+
+.map-fab {
+  box-sizing: border-box;
+  display: flex;
   align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-radius: 8px;
-  box-shadow: 0 4px 14px rgba(60, 64, 67, 0.2);
-  padding: 4px 8px;
-  margin: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 1px 4px rgba(0, 0, 0, 0.02);
+  color: #374151;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.map-fab:active {
+  transform: scale(0.95);
+}
+.map-fab:hover {
+  color: var(--teal);
+}
+
+.map-fab--loading {
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
 }
 
 .map-layer-dropdown {
   position: relative;
-  font-family: inherit;
+  display: flex;
+  justify-content: center;
+}
+
+/* Custom Leaflet Zoom Control Styling */
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1), 0 1px 4px rgba(0, 0, 0, 0.02) !important;
+  border-radius: 24px !important;
+  overflow: hidden;
+  margin: 0 16px 24px !important; /* Stack cleanly */
+}
+.leaflet-control-zoom a, .leaflet-control-zoom a:hover {
+  box-sizing: border-box !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border-bottom: 1px solid rgba(0,0,0,0.05) !important;
+  color: #374151 !important;
+  width: 38px !important;
+  height: 38px !important;
+  line-height: 38px !important;
+  font-size: 18px !important;
+  font-weight: 400 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+}
+.leaflet-control-zoom a:last-child {
+  border-bottom: none !important;
 }
 
 .map-layer-toggle {
@@ -309,28 +370,43 @@
 
 .map-layer-menu {
   position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
   background: #ffffff;
-  border: 1px solid #e8eaed;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(60, 64, 67, 0.15);
+  border: 1px solid rgba(0,0,0,0.05);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   min-width: 160px;
   z-index: 1000;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: 4px;
+  padding: 6px;
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-4px);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.map-layer-dropdown.open .map-layer-menu {
+/* If at bottom right, pop UP and LEFT */
+.leaflet-bottom .map-layer-menu {
+  bottom: calc(100% + 12px);
+  right: 0;
+  transform: translateY(8px);
+}
+.leaflet-bottom .map-layer-dropdown.open .map-layer-menu {
+  transform: translateY(0);
   opacity: 1;
   visibility: visible;
+}
+
+/* If at top right, pop DOWN and LEFT */
+.leaflet-top .map-layer-menu {
+  top: calc(100% + 12px);
+  right: 0;
+  transform: translateY(-8px);
+}
+.leaflet-top .map-layer-dropdown.open .map-layer-menu {
   transform: translateY(0);
+  opacity: 1;
+  visibility: visible;
 }
 
 .map-layer-item {
@@ -355,29 +431,7 @@
   color: var(--teal);
 }
 
-.map-controls-bar__divider {
-  width: 1px;
-  height: 24px;
-  background: #e8eaed;
-  margin: 0 10px;
-}
 
-.map-controls-bar__loc-btn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--teal);
-  border-radius: 4px;
-  transition: background 0.2s;
-}
-
-.map-controls-bar__loc-btn:hover {
-  background: rgba(13, 123, 102, 0.1);
-}
 
 .my-location-icon span {
   display: block;
@@ -387,4 +441,138 @@
   border: 3px solid #fff;
   border-radius: 50%;
   box-shadow: 0 0 4px rgba(0,0,0,0.4);
+}
+
+/* --- Bottom Sheet Map Settings --- */
+.map-settings-sheet-wrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10000;
+}
+
+.map-settings-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: auto;
+  transition: opacity 0.3s ease;
+}
+
+.map-settings-backdrop.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.map-settings-sheet {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border-radius: 24px 24px 0 0;
+  padding: 24px;
+  pointer-events: auto;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.1);
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.map-settings-sheet.open {
+  transform: translateY(0);
+}
+
+.map-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.map-settings-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.close-sheet {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.close-sheet:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.map-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 16px;
+}
+
+.map-type-card {
+  background: transparent;
+  border: 2px solid transparent;
+  padding: 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.map-type-card:hover {
+  background: #f9fafb;
+}
+
+.map-type-card.active {
+  background: rgba(13, 123, 102, 0.05);
+  border-color: var(--teal);
+}
+
+.map-type-preview {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background-color: #e5e7eb;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Previews using live map tiles */
+.map-type-standard { background: url('https://a.tile.openstreetmap.org/14/13830/7721.png') center/cover; }
+.map-type-light { background: url('https://a.basemaps.cartocdn.com/light_all/14/13830/7721.png') center/cover; }
+.map-type-dark { background: url('https://a.basemaps.cartocdn.com/dark_all/14/13830/7721.png') center/cover; }
+.map-type-transport { background: url('https://tile.memomaps.de/tilegen/14/13830/7721.png') center/cover; }
+.map-type-cycle { background: url('https://a.tile-cyclosm.openstreetmap.fr/cyclosm/14/13830/7721.png') center/cover; }
+
+.map-type-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.map-type-card.active .map-type-name {
+  color: var(--teal);
 }

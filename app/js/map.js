@@ -10,7 +10,8 @@ function drawMap(containerId, routeFilter) {
 
     // initialize map if needed
     if (!state.maps[containerId]) {
-      const map = L.map(containerId, { zoomControl: true, attributionControl: false }).setView([10.3157, 123.8854], 13);
+      const map = L.map(containerId, { zoomControl: false, attributionControl: false }).setView([10.3157, 123.8854], 13);
+      L.control.zoom({ position: containerId === "operatorMap" ? "topright" : "bottomright" }).addTo(map);
       // Tile layer definitions – Transport is the default
       const TILE_LAYERS = {
         'Transport': L.tileLayer('https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png', {
@@ -19,12 +20,20 @@ function drawMap(containerId, routeFilter) {
         }),
         'Standard': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           maxZoom: 19,
-          attribution: '&copy; OpenStreetMap contributors'
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }),
-        'CyclOSM': L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
+        'Cycle': L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
           maxZoom: 20,
-          attribution: '&copy; <a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         }),
+        'Light': L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+          maxZoom: 20,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
+        }),
+        'Dark': L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+          maxZoom: 20,
+          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors &copy; <a href="https://carto.com/">CARTO</a>'
+        })
       };
       const tileLayer = TILE_LAYERS['Standard'].addTo(map);
       tileLayer.on('tileerror', function(e) {
@@ -56,39 +65,6 @@ function drawMap(containerId, routeFilter) {
           state.userInteracted = true;
         }
       });
-      // Add floating re-center button
-      const recenterControl = L.control({ position: 'bottomright' });
-      recenterControl.onAdd = function () {
-        const btn = L.DomUtil.create('button', 'map-recenter-btn');
-        btn.type = 'button';
-        btn.title = 'Re-center map';
-        btn.setAttribute('aria-label', 'Re-center map');
-        btn.innerHTML = `
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M12 2v3"></path>
-            <path d="M12 19v3"></path>
-            <path d="M2 12h3"></path>
-            <path d="M19 12h3"></path>
-          </svg>
-          Re-center
-        `;
-        L.DomEvent.disableClickPropagation(btn);
-        L.DomEvent.on(btn, 'click', function () {
-          state.userInteracted = false;
-          const allPoints = state.vehicles
-            .filter(v => !routeFilter || v.route === routeFilter)
-            .filter(v => Number(v.latitude) && Number(v.longitude))
-            .map(v => [Number(v.latitude), Number(v.longitude)]);
-          if (allPoints.length) {
-            map._programmaticMove = true;
-            try { map.fitBounds(L.latLngBounds(allPoints), { maxZoom: 15, padding: [28, 28] }); } catch (e) {}
-            map._programmaticMove = false;
-          }
-        });
-        return btn;
-      };
-      recenterControl.addTo(map);
     }
     const map = state.maps[containerId];
     const layerGroup = state.mapLayers[containerId];
@@ -338,33 +314,36 @@ function drawMap(containerId, routeFilter) {
   function addMapControls(containerId, map, tileLayers, defaultName) {
     if (typeof L === "undefined") return;
     const isOperator = containerId === "operatorMap";
-    const control = L.control({ position: "topright" });
+    const controlPos = isOperator ? "topright" : "bottomright";
+    const control = L.control({ position: controlPos });
     control.onAdd = function () {
       const wrap = L.DomUtil.create("div", "map-controls-bar");
       L.DomEvent.disableClickPropagation(wrap);
       L.DomEvent.disableScrollPropagation(wrap);
 
-      // --- Layer dropdown (LEFT side) ---
-      const dropdownWrap = L.DomUtil.create("div", "map-layer-dropdown", wrap);
-      const layerOrder = ['Transport', 'Standard', 'CyclOSM'];
+      // --- Layer Settings Bottom Sheet ---
+      const mapContainer = map.getContainer();
+      const sheetWrap = L.DomUtil.create("div", "map-settings-sheet-wrap", mapContainer);
+      const backdrop = L.DomUtil.create("div", "map-settings-backdrop", sheetWrap);
+      const sheet = L.DomUtil.create("div", "map-settings-sheet", sheetWrap);
+
+      const sheetHeader = L.DomUtil.create("div", "map-settings-header", sheet);
+      sheetHeader.innerHTML = `<h3>Map Details</h3><button type="button" class="close-sheet" aria-label="Close Map Details"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>`;
       
-      const toggle = L.DomUtil.create("div", "map-layer-toggle", dropdownWrap);
-      toggle.innerHTML = `Map <span class="map-layer-current">${defaultName}</span>
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>`;
-      
-      const menu = L.DomUtil.create("div", "map-layer-menu", dropdownWrap);
+      const grid = L.DomUtil.create("div", "map-settings-grid", sheet);
+      const layerOrder = ['Standard', 'Light', 'Dark', 'Transport', 'Cycle'];
       
       layerOrder.forEach(name => {
-        const item = L.DomUtil.create("button", "map-layer-item", menu);
-        item.textContent = name;
+        const item = L.DomUtil.create("button", "map-type-card", grid);
+        item.type = "button";
+        item.innerHTML = `<div class="map-type-preview map-type-${name.toLowerCase()}"></div><div class="map-type-name">${name}</div>`;
         if (name === defaultName) item.classList.add("active");
         
         L.DomEvent.on(item, "click", (e) => {
           e.stopPropagation();
-          Array.from(menu.children).forEach(child => child.classList.remove("active"));
+          Array.from(grid.children).forEach(child => child.classList.remove("active"));
           item.classList.add("active");
-          dropdownWrap.querySelector('.map-layer-current').textContent = name;
-          dropdownWrap.classList.remove("open");
+          closeSheet();
           
           const current = state.mapActiveTile[containerId];
           if (current) map.removeLayer(current);
@@ -378,58 +357,64 @@ function drawMap(containerId, routeFilter) {
         });
       });
 
+      const openSheet = () => {
+        backdrop.classList.add("open");
+        sheet.classList.add("open");
+      };
+      const closeSheet = () => {
+        backdrop.classList.remove("open");
+        sheet.classList.remove("open");
+      };
+      L.DomEvent.on(backdrop, "click", closeSheet);
+      L.DomEvent.on(sheetHeader.querySelector(".close-sheet"), "click", closeSheet);
+
+
+
+      const toggle = L.DomUtil.create("button", "map-fab", wrap);
+      toggle.type = "button";
+      toggle.title = "Map Settings";
+      toggle.setAttribute("aria-label", "Map Settings");
+      toggle.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transform: scale(0.9)"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 12 12 17 22 12"/><polyline points="2 17 12 22 22 17"/></svg>`;
+      
       L.DomEvent.on(toggle, "click", (e) => {
         e.stopPropagation();
-        dropdownWrap.classList.toggle("open");
-      });
-      
-      L.DomEvent.on(wrap, "click", (e) => {
-        if (!dropdownWrap.contains(e.target)) {
-          dropdownWrap.classList.remove("open");
-        }
-      });
-      document.addEventListener("click", () => {
-        dropdownWrap.classList.remove("open");
+        openSheet();
       });
 
-      // --- Divider ---
-      const divider = L.DomUtil.create("span", "map-controls-bar__divider", wrap);
-      divider.setAttribute("aria-hidden", "true");
 
-      // --- Location / Fit button (RIGHT side) ---
-      const locBtn = L.DomUtil.create("button", "map-controls-bar__loc-btn", wrap);
+      // --- Locate Me / Fit Fleet Button ---
+      const locBtn = L.DomUtil.create("button", "map-fab", wrap);
       locBtn.type = "button";
       if (isOperator) {
         locBtn.title = "Center map on fleet";
         locBtn.setAttribute("aria-label", "Center map on fleet");
-        locBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
+        locBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transform: scale(0.9)"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
       } else {
         locBtn.title = "Show my location";
         locBtn.setAttribute("aria-label", "Show my location");
-        locBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>`;
+        locBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transform: scale(0.9)"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>`;
       }
       L.DomEvent.on(locBtn, "click", () => {
         if (isOperator) {
           fitFleet(containerId);
         } else {
-          locBtn.classList.add("map-controls-bar__loc-btn--loading");
+          locBtn.classList.add("map-fab--loading");
           if (state.lastPosition) {
             map.setView([state.lastPosition.latitude, state.lastPosition.longitude], 16);
-            locBtn.classList.remove("map-controls-bar__loc-btn--loading");
+            locBtn.classList.remove("map-fab--loading");
           } else if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(
               (pos) => {
                 map.setView([pos.coords.latitude, pos.coords.longitude], 16);
-                locBtn.classList.remove("map-controls-bar__loc-btn--loading");
+                locBtn.classList.remove("map-fab--loading");
               },
-              () => { locBtn.classList.remove("map-controls-bar__loc-btn--loading"); }
+              () => { locBtn.classList.remove("map-fab--loading"); }
             );
           } else {
-            locBtn.classList.remove("map-controls-bar__loc-btn--loading");
+            locBtn.classList.remove("map-fab--loading");
           }
         }
       });
-
       return wrap;
     };
     control.addTo(map);

@@ -116,14 +116,20 @@
 
         <section class="tab-panel" id="routesTab">
           <div class="route-directory-sheet">
-            <div class="section-head">
-              <div>
-                <h2>ROUTE DIRECTORY</h2>
-              </div>
+            <div class="routes-header">
+              <h2>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: text-bottom; margin-right: 8px;"><circle cx="6" cy="19" r="3"></circle><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"></path><circle cx="18" cy="5" r="3"></circle></svg><span>Explore Routes</span>
+              </h2>
+              <div id="routesCountrySelect" class="country-search-wrapper"></div>
             </div>
-            <div class="route-directory-controls">
-              <input id="routeSearch" class="route-search" placeholder="Search route" />
-              <select id="cityFilter"></select>
+            <div class="routes-search-container">
+              <div class="routes-search-bar">
+                <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input id="routeSearch" class="route-search-input" placeholder="Search for a route..." />
+              </div>
+              <div class="routes-filter-wrap">
+                <div id="cityFilter" class="country-search-wrapper"></div>
+              </div>
             </div>
             <div id="routeList" class="route-list"></div>
           </div>

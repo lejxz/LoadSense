@@ -287,7 +287,9 @@
     const regionFilter = qs("cityFilter");
     if (regionFilter) {
       regionFilter.addEventListener("change", event => {
-        state.cityFilter = event.target.value || "all";
+        let val = event.target.value || "all";
+        if (val === "All regions") val = "all";
+        state.cityFilter = val;
         state.regionFilter = state.cityFilter;
         setTimeout(() => {
           renderRouteDirectory();
@@ -295,10 +297,9 @@
       });
     }
 
-    // Wire up country change to populate city dropdown from API
-    const mobileCountryContainer = qs("mobileCountrySelect");
-    if (mobileCountryContainer) {
-      const origOnSelect = async (value) => {
+    // Wire up country change to populate city dropdown from API and sync both dropdowns
+    const initCountryDropdowns = (currentVal) => {
+      const handleCountrySelect = async (value) => {
         state.countryFilter = value || "all";
         state.cityFilter = "all";
         state.regionFilter = "all";
@@ -311,33 +312,83 @@
           const regions = regionResult.regions || [];
           const regionDropdown = qs("cityFilter");
           if (regionDropdown) {
-            regionDropdown.innerHTML = `<option value="all">All regions</option>` +
-              regions.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
-            regionDropdown.value = 'all';
+            if (regionDropdown.tagName === "DIV") {
+              if (typeof window.renderSearchableSelect === "function") {
+                window.renderSearchableSelect(
+                  "cityFilter",
+                  ["all", ...regions].map(r => ({ value: r, label: r === "all" ? "All regions" : r })),
+                  "all",
+                  (val) => {
+                    state.regionFilter = val || "all";
+                    state.cityFilter = state.regionFilter;
+                    if (typeof window.renderMobile === "function") window.renderMobile();
+                  },
+                  { placeholder: "All regions", label: "All regions", compact: true }
+                );
+              }
+            } else {
+              regionDropdown.innerHTML = `<option value="all">All regions</option>` +
+                regions.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+              regionDropdown.value = 'all';
+            }
           }
         } catch (e) {
           const regionDropdown = qs("cityFilter");
           if (regionDropdown) {
-            const routeRegions = [...new Set(state.routes
+            const routeRegions = ["all", ...new Set(state.routes
               .filter(r => !value || value === 'all' || r.country === value)
               .map(r => r.region).filter(Boolean))];
-            regionDropdown.innerHTML = `<option value="all">All regions</option>` +
-              routeRegions.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
-            regionDropdown.value = 'all';
+            
+            if (regionDropdown.tagName === "DIV") {
+              if (typeof window.renderSearchableSelect === "function") {
+                window.renderSearchableSelect(
+                  "cityFilter",
+                  routeRegions.map(r => ({ value: r, label: r === "all" ? "All regions" : r })),
+                  "all",
+                  (val) => {
+                    state.regionFilter = val || "all";
+                    state.cityFilter = state.regionFilter;
+                    if (typeof window.renderMobile === "function") window.renderMobile();
+                  },
+                  { placeholder: "All regions", label: "All regions", compact: true }
+                );
+              }
+            } else {
+              regionDropdown.innerHTML = routeRegions.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r === "all" ? "All regions" : r)}</option>`).join('');
+              regionDropdown.value = 'all';
+            }
           }
         }
         await refreshData({ includeAuxiliary: false });
+        
+        // Re-render both dropdowns so their UI stays in sync
+        initCountryDropdowns(state.countryFilter);
         renderMobile();
       };
-      // Re-render the country select with city-loading wired in
-      renderSearchableSelect(
-        "mobileCountrySelect",
-        state.countries.map(country => ({ value: country.code, label: country.name })),
-        state.countryFilter,
-        origOnSelect,
-        { placeholder: "Country", label: "Country", compact: true }
-      );
-    }
+
+      if (qs("mobileCountrySelect")) {
+        renderSearchableSelect(
+          "mobileCountrySelect",
+          state.countries.map(country => ({ value: country.code, label: country.name })),
+          currentVal,
+          handleCountrySelect,
+          { placeholder: "Country", label: "Country", compact: true }
+        );
+      }
+      
+      if (qs("routesCountrySelect")) {
+        renderSearchableSelect(
+          "routesCountrySelect",
+          state.countries.map(country => ({ value: country.code, label: country.name })),
+          currentVal,
+          handleCountrySelect,
+          { placeholder: "Country", label: "Country", compact: true }
+        );
+      }
+    };
+    
+    // Initial setup
+    initCountryDropdowns(state.countryFilter);
 
     const swapTrip = qs("swapTrip");
     if (swapTrip) {

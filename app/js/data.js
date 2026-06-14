@@ -112,10 +112,27 @@
     if (regionFilter) {
       const allRoutesForCountry = state.routes ? state.routes.filter(r => !state.countryFilter || state.countryFilter === "all" || (r.country && r.country.toLowerCase() === state.countryFilter.toLowerCase())) : [];
       const regions = ["all", ...new Set(allRoutesForCountry.map(route => regionName(route)).filter(Boolean))];
-      regionFilter.innerHTML = regions.map(region => `<option value="${escapeHtml(region)}">${escapeHtml(region === "all" ? "All regions" : region)}</option>`).join("");
       if (!regions.includes(state.regionFilter)) state.regionFilter = "all";
       if (regionFilter.id === "cityFilter") state.cityFilter = state.regionFilter;
-      regionFilter.value = regionFilter.id === "cityFilter" ? state.cityFilter : state.regionFilter;
+      
+      if (regionFilter.tagName === "DIV") {
+        if (typeof window.renderSearchableSelect === "function") {
+          window.renderSearchableSelect(
+            regionFilter.id,
+            regions.map(r => ({ value: r, label: r === "all" ? "All regions" : r })),
+            regionFilter.id === "cityFilter" ? state.cityFilter : state.regionFilter,
+            (val) => {
+              state.regionFilter = val || "all";
+              if (regionFilter.id === "cityFilter") state.cityFilter = state.regionFilter;
+              if (typeof window.renderMobile === "function") window.renderMobile();
+            },
+            { placeholder: "All regions", label: "All regions", compact: true }
+          );
+        }
+      } else {
+        regionFilter.innerHTML = regions.map(region => `<option value="${escapeHtml(region)}">${escapeHtml(region === "all" ? "All regions" : region)}</option>`).join("");
+        regionFilter.value = regionFilter.id === "cityFilter" ? state.cityFilter : state.regionFilter;
+      }
     }
   }
 

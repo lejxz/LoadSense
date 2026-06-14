@@ -351,7 +351,13 @@ const api = `${location.origin}/api`;
       })
       .map(route => ({ ...route, summary: routeSummary(route) }));
     if (!matched.length) {
-      container.innerHTML = `<p class="empty-copy">No route matched that search.</p>`;
+      container.innerHTML = `
+        <div class="empty-routes-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><path d="M11 8v6"></path><path d="M8 11h6"></path></svg>
+          <h4>No routes found</h4>
+          <p>Try searching for a different area or route code.</p>
+        </div>
+      `;
       return;
     }
     const grouped = matched.reduce((accumulator, route) => {
@@ -372,22 +378,29 @@ const api = `${location.origin}/api`;
             const selected = route.route === state.selectedRoute ? " selected" : "";
             const stops = routeStopPoints(route).slice(0, 12);
             return `
-              <div class="route-card clean-route-card${selected}">
-                <div class="route-card-head">
-                  <div>
-                    <h3>${escapeHtml(routeDisplayTitle(route))}</h3>
-                    <p>${escapeHtml(regionName(route))} - ${summary.stopCount} stops - ${summary.vehicleCount} live PUVs</p>
+              <div class="route-card-premium${selected}">
+                <div class="route-card-main">
+                  <div class="route-code-pill">${escapeHtml(route.route)}</div>
+                  <div class="route-info-stack">
+                    <h3>${escapeHtml(route.name || routeDisplayTitle(route))}</h3>
+                    <p class="route-meta">
+                      <span>${summary.vehicleCount} live PUVs</span>
+                      ${summary.distanceKm ? `&bull; ~${summary.distanceKm} km away` : "&bull; Near me"}
+                    </p>
                   </div>
-                  <span class="route-distance">${summary.distanceKm ? `~${summary.distanceKm} km away` : "Near me"}</span>
+                  <button class="route-chevron outline mini-action" data-toggle-route="${escapeHtml(route.route)}" type="button" aria-label="Show details">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                  </button>
                 </div>
-                <div class="route-card-body" style="margin-top: 12px; display: none; gap: 8px;">
-                  ${stops.length ? `<ul class="route-stops-list" style="margin:4px 0 8px 0;padding-left:20px;font-size:13px;color:var(--text-muted);display:grid;gap:4px;">${stops.map((stop, index) => `<li>${escapeHtml(routePointCoordinateLabel(stop, index, stops.length))}</li>`).join("")}</ul>` : `<p class="route-landmarks">${escapeHtml((summary.endpoints || []).join(" - "))}</p>`}
-                  <div class="route-actions" style="margin-top: 8px;">
-                    <button class="mini-action" data-use-and-preview-route="${escapeHtml(route.route)}" type="button">Use route &amp; show in map</button>
+                
+                <div class="route-card-expanded" style="display: none;">
+                  ${stops.length ? `<ul class="route-stops-timeline">${stops.map((stop, index) => `<li><span class="stop-dot"></span>${escapeHtml(routePointCoordinateLabel(stop, index, stops.length))}</li>`).join("")}</ul>` : `<p class="route-landmarks">${escapeHtml((summary.endpoints || []).join(" &rarr; "))}</p>`}
+                  <div class="route-actions-row">
+                    <button class="button primary outline full-width-action" data-use-and-preview-route="${escapeHtml(route.route)}" type="button">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+                      Preview on Map
+                    </button>
                   </div>
-                </div>
-                <div style="margin-top: 8px;">
-                  <button class="mini-action outline" data-toggle-route="${escapeHtml(route.route)}" type="button" style="width: 100%;">Show route details</button>
                 </div>
               </div>
             `;
@@ -443,6 +456,7 @@ const api = `${location.origin}/api`;
     `;
 
     container.innerHTML = html;
+    container.dataset.value = currentValue;
 
     const button = container.querySelector(".dropdown-button");
     const popup = container.querySelector(".dropdown-popup");
@@ -489,12 +503,60 @@ const api = `${location.origin}/api`;
       if (option) {
         buttonSpan.textContent = option.label;
         currentValue = value;
+        container.dataset.value = value;
         renderOptions(search.value);
       }
       
       popup.classList.add("hidden");
       onChangeCallback(value);
     });
+  }
+
+  const selectObservers = new Map();
+
+  function makeSelectSearchable(selectId, config = {}) {
+    const select = qs(selectId);
+    if (!select || select.tagName !== "SELECT") return;
+
+    function render() {
+      const options = Array.from(select.options).map(opt => ({
+        value: opt.value,
+        label: opt.text
+      }));
+      renderSearchableSelect(select.dataset.wrapperId, options, select.value, (val) => {
+        select.value = val;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }, config);
+    }
+
+    if (!select.dataset.wrapperId) {
+      select.dataset.wrapperId = selectId + "-searchable-wrapper";
+      const wrapper = document.createElement("div");
+      wrapper.id = select.dataset.wrapperId;
+      wrapper.className = "searchable-select-wrapper";
+      if (select.className) wrapper.className += " " + select.className;
+      select.parentNode.insertBefore(wrapper, select);
+      select.style.display = "none";
+
+      const observer = new MutationObserver(() => {
+        render();
+      });
+      observer.observe(select, { childList: true, attributes: true, attributeFilter: ['value'] });
+      selectObservers.set(selectId, observer);
+      
+      const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+      if (originalDescriptor && !select._valueHooked) {
+         select._valueHooked = true;
+         Object.defineProperty(select, 'value', {
+            get() { return originalDescriptor.get.call(this); },
+            set(val) {
+               originalDescriptor.set.call(this, val);
+               render();
+            }
+         });
+      }
+    }
+    render();
   }
 
   document.addEventListener("click", (e) => {
