@@ -160,9 +160,12 @@
             latitude: Number(button.dataset.lat),
             longitude: Number(button.dataset.lon),
           };
-          state.showTripPanel = false;
-          if (typeof renderDestinationConfirm === 'function') renderDestinationConfirm();
-          if (typeof renderMobile === 'function') renderMobile();
+          if (typeof requestTripSuggestions === 'function') {
+            requestTripSuggestions(button.dataset.placeName);
+          } else {
+            if (typeof renderDestinationConfirm === 'function') renderDestinationConfirm();
+            if (typeof renderMobile === 'function') renderMobile();
+          }
         }
         input.blur();
         input.dispatchEvent(new Event('change', { bubbles: true }));

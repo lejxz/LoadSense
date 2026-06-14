@@ -339,13 +339,6 @@
       );
     }
 
-    const findPuvBtn = qs("findPuvBtn");
-    if (findPuvBtn) {
-      findPuvBtn.addEventListener("click", async () => {
-        await requestTripSuggestions();
-      });
-    }
-
     const swapTrip = qs("swapTrip");
     if (swapTrip) {
       swapTrip.addEventListener("click", () => {
@@ -364,15 +357,6 @@
           if (typeof showToast === "function") showToast("Trip fields swapped.");
         }
       });
-    }
-
-    const toggleTripSearch = qs("toggleTripSearch");
-    if (toggleTripSearch) {
-      toggleTripSearch.addEventListener("click", () => {
-        state.tripSearchManuallyChanged = true;
-        setTripSearchCollapsed(!state.tripSearchCollapsed);
-      });
-      setTripSearchCollapsed(false);
     }
 
     const refreshMobile = qs("refreshMobile");

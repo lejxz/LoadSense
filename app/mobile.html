@@ -37,40 +37,34 @@
 
       <section id="appScreen" class="app-screen hidden">
         <header class="mobile-header">
-          <div>
-            <p class="eyebrow m-0 p-0">Good day: LoadSense</p>
+          <div class="header-greeting">
+            <span class="greeting-text">Good day,</span>
+            <span class="brand-name">LoadSense</span>
           </div>
           <div id="mobileCountrySelect" class="country-search-wrapper"></div>
         </header>
 
         <section id="tripSearchPanel" class="trip-search-panel" aria-label="Find a PUV">
-          <div class="trip-search-heading">
-            <h2>Find a PUV</h2>
-            <button id="toggleTripSearch" class="trip-collapse-toggle" type="button" aria-expanded="true" aria-controls="tripSearchBody" title="Collapse search">
-              <span data-trip-toggle-icon>−</span>
-            </button>
-          </div>
-          <div id="tripSearchBody" class="trip-search-body">
-            <div class="trip-fields">
-              <div class="input-col">
-                <label>
-                  Origin
-                  <input id="originInput" autocomplete="off" value="" placeholder="Search stop, landmark, city" />
-                  <div id="originSearchResults" class="place-search-results hidden"></div>
-                </label>
-                <label>
-                  Destination
-                  <input id="destinationInput" autocomplete="off" placeholder="Search stop, landmark, city" />
-                  <div id="destinationSearchResults" class="place-search-results hidden"></div>
-                </label>
+          <div class="transit-pill">
+            <div class="transit-timeline">
+              <div class="dot origin-dot"></div>
+              <div class="line"></div>
+              <div class="dot dest-dot"></div>
+            </div>
+            <div class="transit-inputs">
+              <div class="input-row">
+                <input id="originInput" autocomplete="off" value="" placeholder="Current location" />
+              </div>
+              <div class="input-divider"></div>
+              <div class="input-row">
+                <input id="destinationInput" autocomplete="off" placeholder="Where to?" />
               </div>
             </div>
-            <div class="trip-actions">
-              <button id="findPuvBtn" class="button primary" type="button">Find PUV</button>
-              <button id="swapTrip" class="swap-trip" type="button" aria-label="Swap origin and destination" title="Swap origin and destination">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4M7 4L3 8M7 4L11 8M17 8V20M17 20L21 16M17 20L13 16"/></svg>
-              </button>
-            </div>
+            <button id="swapTrip" class="swap-trip-btn" type="button" aria-label="Swap origin and destination" title="Swap origin and destination">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4M7 4L3 8M7 4L11 8M17 8V20M17 20L21 16M17 20L13 16"/></svg>
+            </button>
+            <div id="originSearchResults" class="place-search-results hidden"></div>
+            <div id="destinationSearchResults" class="place-search-results hidden"></div>
           </div>
         </section>
 

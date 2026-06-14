@@ -286,7 +286,9 @@ def get_routes(route: Optional[str] = None, q: Optional[str] = None, country: Op
 
 @router.get("/countries")
 def get_countries():
-    codes = sorted({item.get("country") for item in list_routes() if item.get("country")})
+    # Return countries that have a database instead of only countries with active routes
+    from backend.app.db.sqlite_store import COUNTRY_CODES
+    codes = sorted(COUNTRY_CODES)
     return {
         "countries": [
             {"code": code, "name": COUNTRY_NAMES.get(code, code)}

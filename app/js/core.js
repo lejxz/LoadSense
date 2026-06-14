@@ -109,9 +109,13 @@ const api = `${location.origin}/api`;
     if (state.countries.length) return state.countries;
     try {
       const result = await getJson("/countries");
-      state.countries = sortCountries(result.countries || []);
-      if (state.countries.length) return state.countries;
-    } catch (e) {}
+      if (result.countries) {
+        state.countries = sortCountries(result.countries);
+        return state.countries;
+      }
+    } catch (e) {
+      console.warn("Failed to fetch countries", e);
+    }
     state.countries = sortCountries(fallbackCountries);
     return state.countries;
   }
