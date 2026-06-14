@@ -23,10 +23,10 @@
   },
   "artifacts": {
     "eta_model": "cloud/artifacts/eta_model.pkl",
-    "demand_forecast": "cloud/artifacts/demand_forecast.json"
+    "demand_forecast_dir": "cloud/artifacts/demand"
   },
   "data": {
-    "database": "data/loadsense_demo.sqlite",
+    "country_database_dir": "data/countries",
     "synthetic_history": "data/synthetic_occupancy_logs.csv",
     "edge_counter_output": "data/edge_line_crossing_counts.csv",
     "synthetic_rows": 500

@@ -1,5 +1,6 @@
   function renderForecast() {
-    const allRows = state.demand.forecast || [];
+    const routeIds = new Set((state.routes || []).map(route => route.route));
+    const allRows = (state.demand.forecast || []).filter(row => !routeIds.size || routeIds.has(row.route));
     const rows = allRows.slice(0, 24);
     const max = Math.max(1, ...rows.map(row => row.expected_load || 0));
     const routeStats = forecastRouteStats(allRows);
@@ -116,41 +117,68 @@
     qs("opAvgLoad").textContent = state.summary.average_occupancy ?? 0;
     qs("opOverloaded").textContent = state.summary.overloaded ?? 0;
     renderOperatorFilters();
-    const filteredVehicles = filteredOperatorVehicles();
-    qs("operatorFleet").innerHTML = filteredVehicles.length
-      ? filteredVehicles.map(vehicle => `
-          <article>
-            <div>
-              <h3>${escapeHtml(vehicle.vehicle_id)}</h3>
-              <p>Route ${escapeHtml(vehicle.route)} - ${escapeHtml(routeName(vehicle.route))}</p>
-            </div>
-            <span>${vehicle.eta_minutes} min</span>
-            <span>${vehicle.occupancy}/${vehicle.capacity}</span>
-            <span class="occupancy-pill ${tierClass(vehicle.tier)}">${tierLabel(vehicle.tier)}</span>
-            <span>${vehicle.route_deviation?.anomaly ? "Verify route" : "On route"}</span>
-            <div class="fleet-actions">
-              <button class="mini-action" data-zoom-vehicle="${escapeHtml(vehicle.vehicle_id)}">Zoom</button>
-              <button class="mini-action" data-alert-vehicle="${escapeHtml(vehicle.vehicle_id)}" data-alert-route="${escapeHtml(vehicle.route)}">Flag</button>
-            </div>
-          </article>
-        `).join("")
-      : `<p class="empty-copy">No vehicles match the current filters.</p>`;
-    document.querySelectorAll("[data-zoom-vehicle]").forEach(button => {
-      button.addEventListener("click", () => zoomVehicle(button.dataset.zoomVehicle));
-    });
-    document.querySelectorAll("[data-alert-vehicle]").forEach(button => {
-      button.addEventListener("click", () => createAlert(button.dataset.alertVehicle, button.dataset.alertRoute));
-    });
 
-    qs("operatorAlerts").innerHTML = state.alerts.length
-      ? state.alerts.map(renderAlertCard).join("")
-      : `<p class="empty-copy">No active operator alerts.</p>`;
-    bindAlertActions(qs("operatorAlerts"));
-    drawMap("operatorMap");
-    renderForecast();
-    renderDatabaseStatus();
-    renderIncidentLog();
-    renderRoutesAdmin();
+    const activeTab = state.activeOperatorTab || "opsOverview";
+
+    if (activeTab === "opsOverview") {
+      drawMap("operatorMap");
+    }
+
+    if (activeTab === "opsFleet") {
+      const filteredVehicles = filteredOperatorVehicles();
+      qs("operatorFleet").innerHTML = filteredVehicles.length
+        ? filteredVehicles.map(vehicle => `
+            <article>
+              <div>
+                <h3>${escapeHtml(vehicle.vehicle_id)}</h3>
+                <p>Route ${escapeHtml(vehicle.route)} - ${escapeHtml(routeName(vehicle.route))}</p>
+              </div>
+              <span>${vehicle.eta_minutes} min</span>
+              <span>${vehicle.occupancy}/${vehicle.capacity}</span>
+              <span class="occupancy-pill ${tierClass(vehicle.tier)}">${tierLabel(vehicle.tier)}</span>
+              <span>${vehicle.route_deviation?.anomaly ? "Verify route" : "On route"}</span>
+              <div class="fleet-actions">
+                <button class="mini-action" data-zoom-vehicle="${escapeHtml(vehicle.vehicle_id)}">Zoom</button>
+                <button class="mini-action" data-alert-vehicle="${escapeHtml(vehicle.vehicle_id)}" data-alert-route="${escapeHtml(vehicle.route)}">Flag</button>
+                <button class="mini-action outline" data-edit-vehicle="${escapeHtml(vehicle.vehicle_id)}">Edit</button>
+                <button class="mini-action danger" data-delete-vehicle="${escapeHtml(vehicle.vehicle_id)}">Delete</button>
+              </div>
+            </article>
+          `).join("")
+        : `<p class="empty-copy">No vehicles match the current filters.</p>`;
+      qs("operatorFleet").querySelectorAll("[data-zoom-vehicle]").forEach(button => {
+        button.addEventListener("click", () => zoomVehicle(button.dataset.zoomVehicle));
+      });
+      qs("operatorFleet").querySelectorAll("[data-alert-vehicle]").forEach(button => {
+        button.addEventListener("click", () => createAlert(button.dataset.alertVehicle, button.dataset.alertRoute));
+      });
+      qs("operatorFleet").querySelectorAll("[data-edit-vehicle]").forEach(button => {
+        button.addEventListener("click", () => editVehicle(button.dataset.editVehicle));
+      });
+      qs("operatorFleet").querySelectorAll("[data-delete-vehicle]").forEach(button => {
+        button.addEventListener("click", () => deleteVehicle(button.dataset.deleteVehicle));
+      });
+    }
+
+    if (activeTab === "opsRoutes") {
+      renderRoutesAdmin();
+    }
+
+    if (activeTab === "opsDemand") {
+      renderForecast();
+    }
+
+    if (activeTab === "opsAlerts") {
+      qs("operatorAlerts").innerHTML = state.alerts.length
+        ? state.alerts.map(renderAlertCard).join("")
+        : `<p class="empty-copy">No active operator alerts.</p>`;
+      bindAlertActions(qs("operatorAlerts"));
+    }
+
+    if (activeTab === "opsData") {
+      renderDatabaseStatus();
+      renderIncidentLog();
+    }
   }
 
   function renderAlertCard(alert) {
@@ -197,14 +225,22 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, note }),
     });
-    await refreshData();
+    await refreshData({ includeAuxiliary: false });
     renderOperator();
   }
 
   function renderOperatorFilters() {
+    const countryOptions = [{ value: "all", label: "All countries" }, ...state.countries.map(country => ({ value: country.code, label: country.name }))];
+    renderSearchableSelect("operatorCountrySelect", countryOptions, state.countryFilter || "all", async value => {
+      state.countryFilter = value || "all";
+      await refreshData({ includeAuxiliary: false });
+      renderOperator();
+      refreshAuxiliaryData().then(() => renderOperator()).catch(() => {});
+    }, { placeholder: "Country", label: "Country" });
     const routeFilter = qs("fleetRouteFilter");
     if (routeFilter) {
-      const routes = ["all", ...new Set(state.routes.map(route => route.route))];
+      const filteredRoutes = state.routes.filter(r => !state.countryFilter || state.countryFilter === "all" || (r.country && r.country.toLowerCase() === state.countryFilter.toLowerCase()));
+      const routes = ["all", ...new Set(filteredRoutes.map(route => route.route))];
       routeFilter.innerHTML = routes.map(route => `<option value="${escapeHtml(route)}">${escapeHtml(route === "all" ? "All routes" : route)}</option>`).join("");
       if (!routes.includes(state.operatorRouteFilter)) state.operatorRouteFilter = "all";
       routeFilter.value = state.operatorRouteFilter;
@@ -218,9 +254,10 @@
   function filteredOperatorVehicles() {
     const query = state.operatorFleetQuery.toLowerCase();
     return state.vehicles.filter(vehicle => {
-      const route = state.routes.find(item => item.route === vehicle.route);
-      const haystack = `${vehicle.vehicle_id} ${vehicle.route} ${route?.name || ""} ${route?.city || ""} ${vehicle.status || ""}`.toLowerCase();
+      const route = state.routes.find(r => r.route === vehicle.route);
+      const haystack = `${vehicle.vehicle_id} ${vehicle.route} ${route?.name || ""} ${route?.region || ""} ${vehicle.status || ""}`.toLowerCase();
       return (!query || haystack.includes(query))
+        && (!state.countryFilter || state.countryFilter === "all" || vehicle.country === state.countryFilter)
         && (state.operatorRouteFilter === "all" || vehicle.route === state.operatorRouteFilter)
         && (state.operatorTierFilter === "all" || vehicle.tier === state.operatorTierFilter);
     });
@@ -230,9 +267,9 @@
     const query = state.routeQuery.toLowerCase();
     const cityFilter = state.cityFilter || "all";
     const matched = state.routes
-      .filter(route => cityFilter === "all" || cityName(route) === cityFilter)
+      .filter(route => cityFilter === "all" || regionName(route) === cityFilter)
       .filter(route => {
-        const haystack = `${route.route} ${route.name} ${route.city || ""} ${route.zone || ""} ${(route.landmarks || []).join(" ")}`.toLowerCase();
+        const haystack = `${route.route} ${route.name} ${route.region || ""} ${route.zone || ""} ${(route.landmarks || []).join(" ")}`.toLowerCase();
         return !query || haystack.includes(query);
       })
       .map(route => ({
@@ -242,8 +279,12 @@
       .sort((left, right) => {
         const leftDistance = routeDistanceMeters(left, state.lastPosition);
         const rightDistance = routeDistanceMeters(right, state.lastPosition);
-        if (leftDistance !== rightDistance) return leftDistance - rightDistance;
-        return `${cityName(left)} ${left.route}`.localeCompare(`${cityName(right)} ${right.route}`);
+        if (groupBy === "route") {
+          return `${left.route}`.localeCompare(`${right.route}`);
+        }
+        if (groupBy === "city") {
+          return `${left.region || ""} ${left.route}`.localeCompare(`${right.region || ""} ${right.route}`);
+        }
       });
     const container = qs("routeList");
     if (!container) return;
@@ -252,7 +293,7 @@
       return;
     }
     const grouped = matched.reduce((accumulator, route) => {
-      const city = cityName(route);
+      const city = regionName(route);
       if (!accumulator[city]) accumulator[city] = [];
       accumulator[city].push(route);
       return accumulator;
@@ -293,7 +334,7 @@
                 <div class="route-card-head">
                   <div>
                     <h3>${escapeHtml(route.route)} ${escapeHtml(route.name)}</h3>
-                    <p>${escapeHtml(route.zone || cityName(route))} - ${summary.stopCount} stops - ${summary.vehicleCount} live PUVs</p>
+                    <p>${escapeHtml(route.zone || route.region || "")} - ${summary.stopCount} stops - ${summary.vehicleCount} live PUVs</p>
                   </div>
                   <span class="route-distance">${summary.distanceKm ? `~${summary.distanceKm} km away` : "Near me"}</span>
                 </div>
@@ -335,3 +376,178 @@
       });
     });
   }
+
+  function setupVehicleModal() {
+    const addBtn = qs("addVehicleBtn");
+    const modal = qs("vehicleModal");
+    const closeBtn = qs("closeVehicleModal");
+    const form = qs("vehicleForm");
+
+    if (addBtn) {
+      addBtn.addEventListener("click", () => {
+        form.reset();
+        qs("vehicleModalTitle").textContent = "Add Vehicle";
+        qs("vehId").readOnly = false;
+        populateVehicleRegions();
+        populateVehicleRoutes();
+        syncVehicleTypeWithRoute();
+        modal.classList.remove("hidden");
+      });
+    }
+
+    const vehRegion = qs("vehRegion");
+    if (vehRegion) {
+      vehRegion.addEventListener("change", () => {
+        populateVehicleRoutes(vehRegion.value);
+        syncVehicleTypeWithRoute();
+      });
+    }
+    qs("vehRoute")?.addEventListener("change", () => syncVehicleTypeWithRoute());
+
+    if (closeBtn) closeBtn.addEventListener("click", () => modal.classList.add("hidden"));
+
+    if (form) {
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const vid = qs("vehId").value.trim();
+        const payload = {
+          vehicle_id: vid,
+          country: selectedCountryCode(),
+          route: qs("vehRoute").value.trim(),
+          driver: qs("vehDriver").value.trim(),
+          max_occupancy: parseInt(qs("vehMaxOccupancy").value, 10),
+          brand: qs("vehBrand").value.trim(),
+          model: qs("vehModel").value.trim(),
+          plate_number: vid,
+          vehicle_type: selectedVehicleRoute()?.route_type || selectedVehicleRoute()?.type || qs("vehType").value,
+          year: qs("vehYear").value ? parseInt(qs("vehYear").value, 10) : null,
+          registration_number: qs("vehRegistration").value.trim(),
+          status: "active"
+        };
+        const method = qs("vehId").readOnly ? "PUT" : "POST";
+        const url = api + (method === "PUT" ? `/vehicles/${encodeURIComponent(vid)}` : "/vehicles");
+        
+        const res = await fetch(url, {
+          method,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        
+        if (!res.ok) {
+          showToast(await res.text());
+          return;
+        }
+        await refreshData({ includeAuxiliary: false });
+        renderOperator();
+        modal.classList.add("hidden");
+        if (typeof showToast === "function") showToast("Vehicle saved.");
+      });
+    }
+  }
+
+  function editVehicle(vehicleId) {
+    const v = state.vehicles.find(x => x.vehicle_id === vehicleId);
+    if (!v) return;
+    qs("vehId").value = v.vehicle_id;
+    qs("vehId").readOnly = true;
+    
+    const routeSelect = qs("vehRoute");
+    populateVehicleRegions();
+    if (v.route) {
+      const routeObj = state.routes.find(r => r.route === v.route);
+      if (routeObj && routeObj.region) {
+        qs("vehRegion").value = routeObj.region;
+        populateVehicleRoutes(routeObj.region);
+      } else {
+        populateVehicleRoutes();
+      }
+    } else {
+      populateVehicleRoutes();
+    }
+    routeSelect.value = v.route;
+    syncVehicleTypeWithRoute();
+    
+    qs("vehDriver").value = v.driver || "";
+    qs("vehMaxOccupancy").value = v.max_occupancy || v.capacity || 20;
+    qs("vehBrand").value = v.brand || "";
+    qs("vehModel").value = v.model || "";
+    qs("vehType").value = v.vehicle_type || "Jeepney";
+    qs("vehYear").value = v.year || "";
+    qs("vehRegistration").value = v.registration_number || "";
+    
+    qs("vehicleModalTitle").textContent = "Edit Vehicle";
+    qs("vehicleModal").classList.remove("hidden");
+  }
+
+  async function deleteVehicle(vehicleId) {
+    const confirmed = await confirmAction({
+      title: "Delete vehicle",
+      message: `Delete vehicle ${vehicleId}?`,
+      confirmText: "Delete",
+      danger: true,
+    });
+    if (!confirmed) return;
+    const res = await fetch(api + `/vehicles/${encodeURIComponent(vehicleId)}`, { method: "DELETE" });
+    if (!res.ok) {
+      showToast(await res.text());
+      return;
+    }
+    await refreshData({ includeAuxiliary: false });
+    renderOperator();
+    if (typeof showToast === "function") showToast("Vehicle deleted.");
+  }
+
+  function populateVehicleRegions() {
+    const regionSelect = qs("vehRegion");
+    if (!regionSelect) return;
+    const country = selectedCountryCode();
+    const countryNames = new Set((state.countries || []).flatMap(country => [country.code, country.name]).map(value => String(value).toLowerCase()));
+    const routes = state.routes.filter(route => route.country === country);
+    const regions = ["", ...new Set(routes
+      .map(route => route.region || route.zone || route.city || "")
+      .map(region => String(region).trim())
+      .filter(region => region && !countryNames.has(region.toLowerCase()))
+    )].sort();
+    regionSelect.innerHTML = regions.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r || "Any Region")}</option>`).join("");
+  }
+
+  function populateVehicleRoutes(region = "") {
+    const routeSelect = qs("vehRoute");
+    if (!routeSelect) return;
+    const country = selectedCountryCode();
+    const routes = state.routes
+      .filter(route => route.country === country)
+      .filter(route => {
+        const routeRegion = route.region || route.zone || route.city || "";
+        return !region || routeRegion === region;
+      })
+      .sort((a, b) => routeDisplayTitle(a).localeCompare(routeDisplayTitle(b)));
+    routeSelect.innerHTML = routes.map(r => `<option value="${escapeHtml(r.route)}">${escapeHtml(routeDisplayTitle(r))}</option>`).join("");
+    syncVehicleTypeWithRoute();
+  }
+
+  function selectedVehicleRoute() {
+    const routeId = qs("vehRoute")?.value || "";
+    const country = selectedCountryCode();
+    return state.routes.find(route => route.route === routeId && route.country === country)
+      || state.routes.find(route => route.route === routeId);
+  }
+
+  function syncVehicleTypeWithRoute() {
+    const route = selectedVehicleRoute();
+    const type = route?.route_type || route?.type || "";
+    const typeSelect = qs("vehType");
+    if (!typeSelect || !type) return;
+    if (![...typeSelect.options].some(option => option.value === type)) {
+      typeSelect.add(new Option(type, type));
+    }
+    typeSelect.value = type;
+  }
+
+  function selectedCountryCode() {
+    return state.countryFilter && state.countryFilter !== "all" ? state.countryFilter : "PH";
+  }
+
+  window.editVehicle = editVehicle;
+  window.deleteVehicle = deleteVehicle;
+  window.setupVehicleModal = setupVehicleModal;

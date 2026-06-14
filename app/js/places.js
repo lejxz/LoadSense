@@ -1,132 +1,106 @@
+  function cleanStopName(stopName, routeId) {
+    if (!stopName) return "nearest stop";
+    let normalizedStop = stopName.replace(/\s*->\s*/g, " - ");
+    const rName = routeName(routeId);
+    let cleaned = normalizedStop.replace(rName, "").replace(routeId, "");
+    cleaned = cleaned.replace(/^[\s:\->]+/, "").trim();
+    return cleaned || "nearest stop";
+  }
+
   function renderSuggestionCard(suggestion) {
     if (suggestion.legs) {
       return `
         <article class="vehicle-card suggestion-card">
-          <div>
+          <div class="vehicle-card-content">
             <h4>Multi-leg Trip</h4>
-            <p>${escapeHtml(suggestion.route_name)}</p>
-            <p>1. Board <strong>Route ${escapeHtml(suggestion.legs[0].route)}</strong> near ${escapeHtml(suggestion.legs[0].boarding_stop.name)}</p>
-            <p>2. Transfer at <strong>${escapeHtml(suggestion.legs[0].alighting_stop.name)}</strong></p>
-            <p>3. Take <strong>Route ${escapeHtml(suggestion.legs[1].route)}</strong> to ${escapeHtml(suggestion.legs[1].alighting_stop.name)}</p>
-            <p>${Number(suggestion.distance_km || 0).toFixed(1)} km away - arriving in ~${Math.round(Number(suggestion.eta_minutes || 0))} min - PHP ${escapeHtml(suggestion.fare_pesos || "--")}</p>
+            <p class="route-name" style="margin-bottom: 12px;">${escapeHtml(suggestion.route_name)}</p>
+            
+            <div class="multi-puv-leg">
+              <strong>PUV 1 - Route ${escapeHtml(suggestion.legs[0].route)}</strong>
+              <div class="trip-detail-grid">
+                <div style="color: var(--muted);">Board:</div> <div><strong>${escapeHtml(cleanStopName(suggestion.legs[0].boarding_stop?.name, suggestion.legs[0].route))}</strong></div>
+                <div style="color: var(--muted);">Alight:</div> <div><strong>${escapeHtml(cleanStopName(suggestion.legs[0].alighting_stop?.name, suggestion.legs[0].route))}</strong></div>
+                <div style="color: var(--muted);">Distance:</div> <div>${Number(suggestion.distance_km || 0).toFixed(1)} km</div>
+                <div style="color: var(--muted);">ETA to you:</div> <div>~${Math.round(Number(suggestion.eta_minutes || 0))} min</div>
+                <div style="color: var(--muted);">Fare:</div> <div>Included below</div>
+              </div>
+            </div>
+            
+            <div class="multi-puv-leg">
+              <strong>PUV 2 - Route ${escapeHtml(suggestion.legs[1].route)}</strong>
+              <div class="trip-detail-grid">
+                <div style="color: var(--muted);">Board:</div> <div><strong>${escapeHtml(cleanStopName(suggestion.legs[1].boarding_stop?.name, suggestion.legs[1].route))}</strong></div>
+                <div style="color: var(--muted);">Alight:</div> <div><strong>${escapeHtml(cleanStopName(suggestion.legs[1].alighting_stop?.name, suggestion.legs[1].route))}</strong></div>
+                <div style="color: var(--muted);">Distance:</div> <div>Transfer + final leg</div>
+                <div style="color: var(--muted);">ETA to you:</div> <div>After transfer</div>
+                <div style="color: var(--muted);">Fare:</div> <div>Included below</div>
+              </div>
+            </div>
+
+            <div class="trip-detail-grid">
+                <div style="color: var(--muted);">Distance:</div> <div>${Number(suggestion.distance_km || 0).toFixed(1)} km</div>
+                <div style="color: var(--muted);">ETA to you:</div> <div>~${Math.round(Number(suggestion.eta_minutes || 0))} min</div>
+                <div style="color: var(--muted);">Fare:</div> <div>PHP ${escapeHtml(suggestion.fare_pesos || "--")}</div>
+            </div>
           </div>
           <div class="vehicle-card-actions">
             <span class="occupancy-pill ${tierClass(suggestion.tier)}">${tierLabel(suggestion.tier)}</span>
-            <button class="mini-action" data-select-route="${escapeHtml(suggestion.legs[0].route)}">Leg 1 Route</button>
-            <button class="mini-action" data-select-route="${escapeHtml(suggestion.legs[1].route)}">Leg 2 Route</button>
           </div>
         </article>
       `;
     }
     const rName = suggestion.route_name || routeName(suggestion.route);
-    const bName = (suggestion.boarding_stop?.name || "nearest stop").replace(rName, "").trim();
-    const aName = (suggestion.alighting_stop?.name || "destination").replace(rName, "").trim();
+    const bName = normalizeStopLabel(suggestion.boarding_stop, cleanStopName(suggestion.boarding_stop?.name, suggestion.route));
+    const aName = normalizeStopLabel(suggestion.alighting_stop, cleanStopName(suggestion.alighting_stop?.name, suggestion.route));
+    const boardCoords = formatStopCoords(suggestion.boarding_stop);
+    const alightCoords = formatStopCoords(suggestion.alighting_stop);
     return `
       <article class="vehicle-card suggestion-card">
         <div class="vehicle-card-content">
           <h4>${escapeHtml(suggestion.vehicle_id)} <span>Route ${escapeHtml(suggestion.route)}</span></h4>
-          <p class="route-name">${escapeHtml(rName)}</p>
-          <div class="leg-info">
-            <div class="leg-stop"><span>Board</span> <strong>${escapeHtml(bName || "nearest stop")}</strong></div>
-            <div class="leg-stop"><span>Alight</span> <strong>${escapeHtml(aName || "destination")}</strong></div>
+          <p class="route-name" style="margin-bottom: 12px;">${escapeHtml(rName)}</p>
+          <div class="trip-detail-grid">
+            <div style="color: var(--muted);">Board:</div> <div><strong>${escapeHtml(bName || "nearest stop")}</strong>${boardCoords ? `<div class="muted">(${escapeHtml(boardCoords)})</div>` : ""}</div>
+            <div style="color: var(--muted);">Alight:</div> <div><strong>${escapeHtml(aName || "destination")}</strong>${alightCoords ? `<div class="muted">(${escapeHtml(alightCoords)})</div>` : ""}</div>
+            <div style="color: var(--muted);">Distance:</div> <div>${Number(suggestion.distance_km || 0).toFixed(1)} km</div>
+            <div style="color: var(--muted);">Applicability:</div> <div>${Math.round(Number(suggestion.route_applicability || 0) * 100)}%</div>
+            <div style="color: var(--muted);">ETA to you:</div> <div>~${Math.round(Number(suggestion.eta_minutes || 0))} min</div>
+            <div style="color: var(--muted);">Fare:</div> <div>PHP ${escapeHtml(suggestion.fare_pesos || "--")}</div>
           </div>
-          <p class="trip-meta">${Number(suggestion.distance_km || 0).toFixed(1)} km away &bull; arriving in ~${Math.round(Number(suggestion.eta_minutes || 0))} min &bull; PHP ${escapeHtml(suggestion.fare_pesos || "--")}</p>
         </div>
         <div class="vehicle-card-actions">
           <span class="occupancy-pill ${tierClass(suggestion.tier)}">${tierLabel(suggestion.tier)}</span>
           <button class="mini-action" data-zoom-vehicle="${escapeHtml(suggestion.vehicle_id)}">Zoom</button>
-          <button class="mini-action" data-select-route="${escapeHtml(suggestion.route)}">Route</button>
         </div>
       </article>
     `;
   }
 
-  function placeFromInput(value) {
-    const normalized = String(value || "").trim().toLowerCase();
-    if (!normalized || normalized === "current location" || normalized === "my location") return null;
-    return rankedPlaces(normalized, 1)[0] || null;
-  }
-
   function normalizeSearch(value) {
-    return String(value || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim();
+    return String(value || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
-  function placeSearchText(place) {
-    return normalizeSearch(`${place.name || ""} ${place.city || ""} ${place.route || ""} ${(place.aliases || []).join(" ")}`);
+  function formatPlaceSubtitle(place) {
+    return String(place?.subtitle || place?.address_text || place?.city || place?.country || '').trim();
   }
 
-  function rankedPlaces(query, limit = 8) {
-    const needle = normalizeSearch(query);
-    if (!needle) return [];
-    const tokens = needle.split(" ");
-    const routeLike = /^(route\s+)?[a-z0-9]{1,4}$/.test(needle);
-    return state.places
-      .map(place => {
-        const haystack = placeSearchText(place);
-        let score = 0;
-        if (haystack === needle) score = 220;
-        else if (haystack.includes(needle)) score = 140;
-        else if (tokens.every(token => haystack.includes(token))) score = 95;
-        else if (haystack.replaceAll(" ", "").includes(needle.replaceAll(" ", ""))) score = 75;
-        score += placeKindBoost(place.kind, routeLike);
-        return { place, score };
-      })
-      .filter(item => item.score > 0)
-      .sort((left, right) => right.score - left.score || `${left.place.city} ${left.place.name}`.localeCompare(`${right.place.city} ${right.place.name}`))
-      .slice(0, limit)
-      .map(item => item.place);
-  }
-
-  function mergePlaces(places) {
-    if (!Array.isArray(places) || !places.length) return;
-    const existing = new Set(state.places.map(place => placeKey(place)));
-    for (const place of places) {
-      const key = placeKey(place);
-      if (existing.has(key)) continue;
-      existing.add(key);
-      state.places.push(place);
-    }
-  }
-
-  function placeKey(place) {
-    return `${normalizeSearch(place?.name)}-${Number(place?.latitude || 0).toFixed(4)}-${Number(place?.longitude || 0).toFixed(4)}`;
-  }
-
-  function placeKindBoost(kind, routeLike) {
-    const boosts = {
-      city: 70,
-      town: 68,
-      barangay: 66,
-      terminal: 58,
-      landmark: 54,
-      place: 48,
-      stop: 14,
-      route: routeLike ? 38 : -45,
-    };
-    return boosts[kind] ?? 0;
-  }
-
-  function renderPlaceResults(inputId, panelId) {
+  function renderPlaceResults(inputId, panelId, exactMatches = null) {
     const input = qs(inputId);
     const panel = qs(panelId);
     if (!input || !panel) return;
-    const value = input.value.trim();
-    const isOrigin = inputId === "originInput" || inputId === "mapOriginInput";
-    const isDestination = inputId === "destinationInput" || inputId === "mapDestinationInput";
+    const isOrigin = inputId === 'originInput';
     
-    let matches = value ? rankedPlaces(value, isDestination ? 20 : 7) : [];
-    if (isDestination) {
-      matches = matches.filter(p => p.kind !== "route" && !(p.kind === "stop" && /Checkpoint|Mid-route|Origin|Terminal/i.test(p.name))).slice(0, 7);
-    }
+    let sourceList = exactMatches || [];
+    const matches = sourceList.filter(place => place && place.name).slice(0, 8);
 
     if (!matches.length && !isOrigin) {
-      panel.classList.add("hidden");
-      panel.innerHTML = "";
+      panel.classList.add('hidden');
+      panel.innerHTML = '';
       return;
     }
-    panel.classList.remove("hidden");
-    
-    let html = "";
+    panel.classList.remove('hidden');
+
+    let html = '';
     if (isOrigin) {
       html += `
         <button type="button" data-use-location="true" class="use-location-btn">
@@ -134,80 +108,112 @@
         </button>
       `;
     }
-    
-    html += matches.map(place => `
-      <button type="button" data-place-name="${escapeHtml(place.name)}">
+    html += matches.map((place, index) => `
+      <button type="button" class="${index === 0 ? 'active' : ''}" data-place-name="${escapeHtml(place.name)}" data-city="${escapeHtml(place.city || '')}" data-lat="${place.latitude || ''}" data-lon="${place.longitude || ''}" title="${escapeHtml(place.name)}">
         <strong>${escapeHtml(place.name)}</strong>
-        <span>${escapeHtml(place.city || "Philippines")}${place.route ? ` - Route ${escapeHtml(place.route)}` : ""}</span>
+        <span alt="${escapeHtml(formatPlaceSubtitle(place))}">${escapeHtml(formatPlaceSubtitle(place))}</span>
       </button>
-    `).join("");
-    
+    `).join('');
+
     panel.innerHTML = html;
 
-    const useLocBtn = panel.querySelector("[data-use-location]");
+    const useLocBtn = panel.querySelector('[data-use-location]');
     if (useLocBtn) {
-      useLocBtn.addEventListener("click", () => {
-        input.value = "";
-        input.dispatchEvent(new Event("input"));
-        input.dispatchEvent(new Event("change"));
-        panel.classList.add("hidden");
-        panel.innerHTML = "";
+      useLocBtn.addEventListener('click', () => {
+        input.value = '';
+        state.usingCurrentLocation = true;
+        input.blur();
+        input.dispatchEvent(new Event('change'));
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
         if (navigator.geolocation) {
           navigator.geolocation.getCurrentPosition(pos => {
             state.lastPosition = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
-            if (typeof renderMobile === "function") renderMobile();
+            if (typeof renderMobile === 'function') renderMobile();
           }, () => {
-            if (typeof showToast === "function") showToast("Location access denied.");
+            if (typeof showToast === 'function') showToast('Location access denied.');
           });
         }
+        updateOriginPlaceholder();
       });
     }
 
-    panel.querySelectorAll("[data-place-name]").forEach(button => {
-      button.addEventListener("click", () => {
+    panel.querySelectorAll('[data-place-name]').forEach(button => {
+      button.addEventListener('mousedown', (e) => {
+        e.preventDefault();
         input.value = button.dataset.placeName;
-        panel.classList.add("hidden");
-        panel.innerHTML = "";
-        if (isDestination) {
-          const place = placeFromInput(input.value);
-          if (place && isMapCoordinate(place)) {
-            state.selectedDestination = {
-              name: place.name,
-              latitude: Number(place.latitude),
-              longitude: Number(place.longitude),
+        if (isOrigin) {
+          state.usingCurrentLocation = false;
+          if (button.dataset.lat && button.dataset.lon) {
+            state.selectedOrigin = {
+              name: button.dataset.placeName,
+              city: button.dataset.city,
+              latitude: Number(button.dataset.lat),
+              longitude: Number(button.dataset.lon),
             };
-            renderDestinationConfirm();
           }
+          updateOriginPlaceholder();
+        } else if (button.dataset.lat && button.dataset.lon) {
+          state.selectedDestination = {
+            name: button.dataset.placeName,
+            city: button.dataset.city,
+            latitude: Number(button.dataset.lat),
+            longitude: Number(button.dataset.lon),
+          };
+          if (typeof renderDestinationConfirm === 'function') renderDestinationConfirm();
+          if (typeof renderMobile === 'function') renderMobile();
         }
+        input.blur();
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
       });
     });
+  }
+
+  function updateOriginPlaceholder() {
+    const isUsingLoc = state.usingCurrentLocation;
+    const el = qs('originInput');
+    if (!el) return;
+    el.placeholder = isUsingLoc ? '📍 Current location' : 'Search place';
+  }
+
+  const placeSearchSeq = {};
+
+  async function fetchPlaces(query) {
+    const params = new URLSearchParams({ q: query, limit: '8', remote: 'true' });
+    if (state.countryFilter && state.countryFilter !== "all") {
+      params.set("country", state.countryFilter);
+    }
+    const result = await getJson(`/places?${params.toString()}`);
+    return result.places || [];
   }
 
   function bindPlaceSearch(inputId, panelId) {
     const input = qs(inputId);
     if (!input) return;
-    input.addEventListener("input", () => {
+    input.addEventListener('input', () => {
+      if (inputId === 'originInput') state.selectedOrigin = null;
+      if (inputId === 'destinationInput') state.selectedDestination = null;
       renderPlaceResults(inputId, panelId);
       clearTimeout(state.placeSearchTimers[inputId]);
       state.placeSearchTimers[inputId] = setTimeout(async () => {
         const query = input.value.trim();
         if (query.length < 2) return;
+        placeSearchSeq[inputId] = (placeSearchSeq[inputId] || 0) + 1;
+        const seq = placeSearchSeq[inputId];
         try {
-          const result = await getJson(`/places?q=${encodeURIComponent(query)}&limit=12&remote=true`);
-          mergePlaces(result.places || []);
-          if (document.activeElement === input) {
-            renderPlaceResults(inputId, panelId);
-          }
+          const apiPlaces = await fetchPlaces(query);
+          if (seq !== placeSearchSeq[inputId] || document.activeElement !== input) return;
+          renderPlaceResults(inputId, panelId, apiPlaces);
         } catch (error) {
-          if (document.activeElement === input) {
-            renderPlaceResults(inputId, panelId);
-          }
+          if (document.activeElement === input) renderPlaceResults(inputId, panelId);
         }
-      }, 280);
+      }, 400);
     });
-    input.addEventListener("focus", () => renderPlaceResults(inputId, panelId));
-    input.addEventListener("blur", () => {
-      setTimeout(() => qs(panelId)?.classList.add("hidden"), 140);
+    input.addEventListener('focus', () => renderPlaceResults(inputId, panelId));
+    input.addEventListener('blur', () => {
+      setTimeout(() => qs(panelId)?.classList.add('hidden'), 140);
     });
   }
 
@@ -227,36 +233,43 @@
   }
 
   function buildTripPayload(query = "", options = {}) {
-    const originInput = qs("originInput");
-    const destinationInput = qs("destinationInput");
-    state.originInput = originInput?.value.trim() || "Current Location";
-    state.destinationInput = destinationInput?.value.trim() || "";
+    const activeOriginInput = qs("originInput");
+    const activeDestInput = qs("destinationInput");
+    state.originInput = activeOriginInput?.value.trim() || "Current Location";
+    state.destinationInput = activeDestInput?.value.trim() || "";
     const chatMode = options.chat === true;
     const useRouteContext = chatMode && queryUsesChatRouteContext(query);
     const freshTrip = chatMode && queryLooksLikeFreshTrip(query);
     const payloadOrigin = chatMode && freshTrip ? "" : state.originInput;
     const payloadDestination = chatMode ? "" : state.destinationInput;
-    const originPlace = placeFromInput(payloadOrigin);
-    const destinationPlace = placeFromInput(payloadDestination);
     const dynamicRouteSearch = queryNeedsRouteSearch(query, payloadDestination);
     const payload = {
       route: useRouteContext ? (state.chatContext.route || state.selectedRoute) : (dynamicRouteSearch || chatMode ? "" : state.selectedRoute),
       query,
+      country: state.countryFilter && state.countryFilter !== "all" ? state.countryFilter : "",
       origin: payloadOrigin,
       destination: payloadDestination,
       limit: 6,
     };
-    if (originPlace) {
-      payload.origin_latitude = originPlace.latitude;
-      payload.origin_longitude = originPlace.longitude;
-    } else if (state.lastPosition && /current location|my location|here/i.test(state.originInput)) {
+    
+    // Priority 1: Exact selected coordinates from dropdown
+    // Priority 2: Fuzzy match from local ranked places
+    if (state.selectedOrigin && payloadOrigin.toLowerCase() === (state.selectedOrigin.name || "").toLowerCase()) {
+      payload.origin_latitude = state.selectedOrigin.latitude;
+      payload.origin_longitude = state.selectedOrigin.longitude;
+    }
+    
+    if (!payload.origin_latitude && state.lastPosition && (!payloadOrigin || state.usingCurrentLocation || /current location|my location|here/i.test(payloadOrigin))) {
       payload.origin_latitude = state.lastPosition.latitude;
       payload.origin_longitude = state.lastPosition.longitude;
     }
-    if (destinationPlace) {
-      payload.destination_latitude = destinationPlace.latitude;
-      payload.destination_longitude = destinationPlace.longitude;
+
+    if (state.selectedDestination && payloadDestination.toLowerCase() === (state.selectedDestination.name || "").toLowerCase()) {
+      payload.destination_latitude = state.selectedDestination.latitude;
+      payload.destination_longitude = state.selectedDestination.longitude;
+      if (!payload.destination) payload.destination = state.selectedDestination.name || "";
     }
+    
     return payload;
   }
 
@@ -264,6 +277,7 @@
     state.tripSuggestions = result?.suggestions || result?.context || [];
     state.tripMatches = result?.matches || [];
     state.tripMessage = result?.answer || "";
+    state.tripNoRouteFound = result?.no_route_found === true;
     if (result?.destination && isMapCoordinate(result.destination)) {
       state.selectedDestination = {
         latitude: Number(result.destination.latitude),

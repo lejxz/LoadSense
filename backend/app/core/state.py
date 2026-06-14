@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -28,7 +29,7 @@ def parse_timestamp(value: str) -> datetime:
 
 class FleetStore:
     def __init__(self) -> None:
-        sqlite_store.init_db()
+        sqlite_store.init_all_country_dbs()
         self._vehicles: Dict[str, VehicleState] = {
             vehicle.vehicle_id: vehicle for vehicle in sqlite_store.load_vehicle_states()
         }
@@ -102,6 +103,7 @@ class FleetStore:
         self,
         query: str = "",
         route: str = "",
+        country: str | None = None,
         origin_text: str = "",
         origin_latitude: Optional[float] = None,
         origin_longitude: Optional[float] = None,
@@ -110,9 +112,18 @@ class FleetStore:
         destination_longitude: Optional[float] = None,
         limit: int = 5,
     ) -> Dict[str, Any]:
+        routes = list_routes()
+        vehicles = [model_to_dict(vehicle) for vehicle in self.fleet()]
+        if country:
+            routes = [item for item in routes if item.get("country") == country]
+            route_ids = {item.get("route") for item in routes}
+            vehicles = [
+                vehicle for vehicle in vehicles
+                if vehicle.get("country") == country or vehicle.get("route") in route_ids
+            ]
         return find_transit_suggestions(
-            routes=list_routes(),
-            vehicles=[model_to_dict(vehicle) for vehicle in self.fleet()],
+            routes=routes,
+            vehicles=vehicles,
             query=query,
             selected_route=route,
             origin_text=origin_text,
@@ -122,12 +133,14 @@ class FleetStore:
             destination_latitude=destination_latitude,
             destination_longitude=destination_longitude,
             limit=limit,
+            include_remote_places=country is None,
         )
 
     def recommendation(
         self,
         route: str,
         query: str = "",
+        country: str | None = None,
         origin_text: str = "",
         origin_latitude: Optional[float] = None,
         origin_longitude: Optional[float] = None,
@@ -150,12 +163,12 @@ class FleetStore:
         explicit_route = self._route_from_query(query)
         context_route = explicit_route or (route if self._uses_route_context(query) else "")
         if self._is_route_info_query(query):
-            answer, context = self._route_info_answer(context_route)
+            answer, context = self._route_info_answer(context_route, country=country)
             sqlite_store.save_chat_query(context_route or "all", query, answer, datetime.now(UTC).isoformat())
             return {"route": context_route or "", "answer": answer, "context": context, "matches": [], "language": "en", "intent": "route_info"}
 
         if self._is_avoid_query(query):
-            answer, context = self._avoidance_answer(context_route)
+            answer, context = self._avoidance_answer(context_route, country=country)
             saved_route = context_route or "all"
             sqlite_store.save_chat_query(saved_route, query, answer, datetime.now(UTC).isoformat())
             return {
@@ -168,18 +181,19 @@ class FleetStore:
             }
 
         if self._is_least_crowded_query(query):
-            answer, context = self._least_crowded_answer(context_route)
+            answer, context = self._least_crowded_answer(context_route, country=country)
             sqlite_store.save_chat_query(context_route or "all", query, answer, datetime.now(UTC).isoformat())
             return {"route": context_route or "all", "answer": answer, "context": context, "matches": [], "language": "en", "intent": "least_crowded"}
 
         if self._is_boarding_followup(query) and context_route:
-            answer, context = self._best_boarding_answer(context_route)
+            answer, context = self._best_boarding_answer(context_route, country=country)
             sqlite_store.save_chat_query(context_route, query, answer, datetime.now(UTC).isoformat())
             return {"route": context_route, "answer": answer, "context": context, "matches": [], "language": "en", "intent": "boarding"}
 
         suggestion_result = self.route_suggestions(
             query=query,
             route=route,
+            country=country,
             origin_text=origin_text,
             origin_latitude=origin_latitude,
             origin_longitude=origin_longitude,
@@ -214,11 +228,14 @@ class FleetStore:
                 "language": suggestion_result["language"],
             }
 
-        route_vehicles = [vehicle for vehicle in self.fleet() if vehicle.route == route]
+        route_vehicles = [
+            vehicle for vehicle in self.fleet()
+            if vehicle.route == route and (not country or self._vehicle_country(vehicle) == country)
+        ]
         if not route_vehicles:
             return {
                 "route": route,
-                "answer": f"No live vehicles are reporting for Route {route} yet. Wait for the next telemetry update.",
+                "answer": f"Ride Route {route}. No live vehicles are reporting for Route {route} yet, so wait for the next telemetry update before choosing a specific PUV.",
                 "context": [],
             }
 
@@ -263,25 +280,26 @@ class FleetStore:
         return sqlite_store.database_status()
 
     def _raise_alerts(self, state: VehicleState, previous: Optional[VehicleState] = None) -> None:
-        if state.tier == "blinking_red":
+        if state.tier == "blinking_red" and (not previous or previous.tier != "blinking_red") and not sqlite_store.has_recent_vehicle_alert(state.vehicle_id, minutes=10):
             self._append_alert(
                 "high",
                 state,
                 f"{state.vehicle_id} is overloaded at {state.occupancy}/{state.capacity} passengers.",
             )
-        if state.route_deviation["anomaly"]:
+        if state.route_deviation["anomaly"] and (not previous or not previous.route_deviation.get("anomaly")):
             self._append_alert(
                 "high",
                 state,
                 f"{state.vehicle_id} deviated {state.route_deviation['deviation_meters']}m from Route {state.route}.",
             )
-        if state.signal_quality != "ok":
+        if state.signal_quality != "ok" and (not previous or previous.signal_quality == "ok"):
             self._append_alert(
                 "medium",
                 state,
                 f"{state.vehicle_id} reports {state.signal_quality.replace('_', ' ')} signal quality.",
             )
-        if state.speed_kph is not None and state.speed_kph > float(config_value("safety", "speed_limit_kph", default=60)):
+        limit = float(config_value("safety", "speed_limit_kph", default=60))
+        if state.speed_kph is not None and state.speed_kph > limit and (not previous or previous.speed_kph is None or previous.speed_kph <= limit):
             self._append_alert(
                 "medium",
                 state,
@@ -297,6 +315,8 @@ class FleetStore:
                 )
 
     def _append_alert(self, severity: str, state: VehicleState, message: str) -> None:
+        if sqlite_store.has_open_alert(state.vehicle_id, message):
+            return
         duplicate = next((alert for alert in self._alerts if not alert.acknowledged and alert.vehicle_id == state.vehicle_id and alert.message == message), None)
         if duplicate:
             return
@@ -375,12 +395,23 @@ class FleetStore:
         text = query.lower()
         for route in list_routes():
             route_id = str(route.get("route", ""))
-            if route_id and route_id.lower() in text:
+            if route_id and re.search(rf"(?<![a-z0-9]){re.escape(route_id.lower())}(?![a-z0-9])", text):
                 return route_id
         return ""
 
-    def _avoidance_answer(self, route: str = "") -> tuple[str, List[Dict[str, Any]]]:
-        route_vehicles = [vehicle for vehicle in self.fleet() if not route or vehicle.route == route]
+    def _vehicle_country(self, vehicle: VehicleState) -> str:
+        route_countries = {item.get("route"): item.get("country") for item in list_routes()}
+        if route_countries.get(vehicle.route):
+            return str(route_countries[vehicle.route])
+        static_vehicle = next((item for item in sqlite_store.list_vehicles() if item.get("vehicle_id") == vehicle.vehicle_id), None)
+        return str((static_vehicle or {}).get("country") or "")
+
+    def _avoidance_answer(self, route: str = "", country: str | None = None) -> tuple[str, List[Dict[str, Any]]]:
+        route_vehicles = [
+            vehicle for vehicle in self.fleet()
+            if (not route or vehicle.route == route)
+            and (not country or self._vehicle_country(vehicle) == country)
+        ]
         context = [model_to_dict(vehicle) for vehicle in route_vehicles]
         route_label = f"Route {route}" if route else "the live fleet"
         if not route_vehicles:
@@ -420,8 +451,13 @@ class FleetStore:
             context,
         )
 
-    def _least_crowded_answer(self, route: str = "") -> tuple[str, List[Dict[str, Any]]]:
-        vehicles = [vehicle for vehicle in self.fleet() if (not route or vehicle.route == route) and vehicle.status != "idle"]
+    def _least_crowded_answer(self, route: str = "", country: str | None = None) -> tuple[str, List[Dict[str, Any]]]:
+        vehicles = [
+            vehicle for vehicle in self.fleet()
+            if (not route or vehicle.route == route)
+            and (not country or self._vehicle_country(vehicle) == country)
+            and vehicle.status != "idle"
+        ]
         context = [model_to_dict(vehicle) for vehicle in vehicles]
         route_label = f"Route {route}" if route else "the live fleet"
         if not vehicles:
@@ -436,11 +472,16 @@ class FleetStore:
             [model_to_dict(vehicle) for vehicle in ranked],
         )
 
-    def _best_boarding_answer(self, route: str) -> tuple[str, List[Dict[str, Any]]]:
-        vehicles = [vehicle for vehicle in self.fleet() if vehicle.route == route and vehicle.status != "idle"]
+    def _best_boarding_answer(self, route: str, country: str | None = None) -> tuple[str, List[Dict[str, Any]]]:
+        vehicles = [
+            vehicle for vehicle in self.fleet()
+            if vehicle.route == route
+            and (not country or self._vehicle_country(vehicle) == country)
+            and vehicle.status != "idle"
+        ]
         context = [model_to_dict(vehicle) for vehicle in vehicles]
         if not vehicles:
-            return f"No live PUVs are reporting for Route {route} right now.", context
+            return f"Ride Route {route}. No live PUVs are reporting for Route {route} right now, so wait for the next telemetry update before choosing a specific PUV.", context
         ranked = sorted(vehicles, key=lambda vehicle: (self._tier_penalty(vehicle.tier), vehicle.eta_minutes, vehicle.occupancy))
         best = ranked[0]
         return (
@@ -449,11 +490,14 @@ class FleetStore:
             [model_to_dict(vehicle) for vehicle in ranked],
         )
 
-    def _route_info_answer(self, route: str) -> tuple[str, List[Dict[str, Any]]]:
+    def _route_info_answer(self, route: str, country: str | None = None) -> tuple[str, List[Dict[str, Any]]]:
         if not route:
             return "Which route do you want me to explain? Ask after a recommendation or include the route code.", []
-        route_info = next((item for item in list_routes() if item.get("route") == route), None)
-        vehicles = [vehicle for vehicle in self.fleet() if vehicle.route == route]
+        route_info = next((item for item in list_routes() if item.get("route") == route and (not country or item.get("country") == country)), None)
+        vehicles = [
+            vehicle for vehicle in self.fleet()
+            if vehicle.route == route and (not country or self._vehicle_country(vehicle) == country)
+        ]
         context = [model_to_dict(vehicle) for vehicle in vehicles]
         if not route_info:
             return f"I do not have route details for Route {route} yet.", context

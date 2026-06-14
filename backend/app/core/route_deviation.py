@@ -2,13 +2,21 @@ import math
 from typing import Dict, Tuple
 
 from backend.app.core.config import config_value, route_polylines
+from backend.app.core.routes import list_routes
 from backend.app.db import sqlite_store
 
 
 RoutePoint = Tuple[float, float]
 
+# Lazy-load config polylines only when needed (not at import time)
+_config_polylines: Dict[str, list[RoutePoint]] | None = None
 
-ROUTE_POLYLINES: Dict[str, list[RoutePoint]] = route_polylines()
+
+def _get_config_polylines() -> Dict[str, list[RoutePoint]]:
+    global _config_polylines
+    if _config_polylines is None:
+        _config_polylines = route_polylines()
+    return _config_polylines
 
 
 def _project(lat: float, lon: float, origin_lat: float) -> tuple[float, float]:
@@ -36,7 +44,15 @@ def _distance_point_to_segment(point: RoutePoint, start: RoutePoint, end: RouteP
 
 
 def distance_to_route_meters(latitude: float, longitude: float, route: str) -> float:
-    points = sqlite_store.load_route_polyline(route) or ROUTE_POLYLINES.get(route)
+    # Use cached DB polyline first, then fall back to config
+    points = sqlite_store.load_route_polyline(route) or _get_config_polylines().get(route)
+    if not points:
+        route_record = next((item for item in list_routes() if item.get("route") == route), None)
+        points = [
+            (float(point["latitude"]), float(point["longitude"]))
+            for point in (route_record or {}).get("polyline", [])
+            if "latitude" in point and "longitude" in point
+        ]
     if not points:
         raise KeyError(f"unknown route '{route}'")
 

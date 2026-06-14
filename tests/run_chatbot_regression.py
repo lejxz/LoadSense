@@ -145,6 +145,7 @@ def main() -> None:
     )
     assert_place_search(client, "Minglanilla", "Minglanilla", "town")
     assert_place_search(client, "Basak", "Basak Cebu", "barangay")
+    assert_place_search(client, "Lipata", "Lipata", "barangay")
     print("chatbot regression ok")
 
 

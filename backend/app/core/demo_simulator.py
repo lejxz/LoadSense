@@ -12,7 +12,7 @@ from backend.app.db import sqlite_store
 
 
 class SyntheticFleetSimulator:
-    def __init__(self, fleet_store: Any, vehicles_per_route: int = 8, interval_seconds: float = 3.0) -> None:
+    def __init__(self, fleet_store: Any, vehicles_per_route: int = 3, interval_seconds: float = 3.0) -> None:
         self.fleet_store = fleet_store
         self.vehicles_per_route = vehicles_per_route
         self.interval_seconds = interval_seconds
@@ -31,20 +31,39 @@ class SyntheticFleetSimulator:
     def _run(self) -> None:
         random.seed(2026)
         tick = 0
+        # Cache routes and vehicles — only reload every 30 ticks (~90s)
+        cached_routes = None
+        cached_vehicles = None
+        cache_tick = -30
         while not self._stop.is_set():
-            routes = [route for route in sqlite_store.load_routes() if len(route.get("polyline", [])) >= 2]
-            for route_index, route in enumerate(routes):
+            if tick - cache_tick >= 30 or cached_routes is None:
+                cached_routes = [route for route in sqlite_store.load_routes() if len(route.get("polyline", [])) >= 2]
+                cached_vehicles = sqlite_store.list_vehicles()
+                cache_tick = tick
+            route_vehicles = {}
+            for v in cached_vehicles:
+                if v["status"] == "active":
+                    route_vehicles.setdefault(v["route"], []).append(v)
+
+            for route_index, route in enumerate(cached_routes):
                 points = route["polyline"]
-                for vehicle_index in range(self.vehicles_per_route):
+                vehicles_for_route = route_vehicles.get(route["route"], [])
+                count = len(vehicles_for_route)
+                
+                for vehicle_index, v in enumerate(vehicles_for_route):
                     direction = "forward" if (route_index + vehicle_index) % 2 == 0 else "backward"
                     speed_kph = 20 + ((tick + vehicle_index * 7 + route_index * 3) % 21)
-                    progress = ((tick * (0.0045 + vehicle_index * 0.0008)) + vehicle_index / self.vehicles_per_route + route_index * 0.017) % 1.0
+                    progress = ((tick * (0.0045 + vehicle_index * 0.0008)) + vehicle_index / max(1, count) + route_index * 0.017) % 1.0
                     position = progress if direction == "forward" else 1.0 - progress
                     lat, lon = _point_at(points, position)
-                    occupancy = _occupancy_for(tick, route_index, vehicle_index)
+                    
+                    wave = math.sin((tick + route_index * 3 + vehicle_index * 5) / 7)
+                    max_occ = v.get("max_occupancy", 20)
+                    occupancy = max(0, min(max_occ, int(max_occ * 0.4 + wave * max_occ * 0.3)))
+                    
                     status = _status_for(tick, occupancy, route_index, vehicle_index)
                     payload = SimpleNamespace(
-                        vehicle_id=f"{route['route']}-{vehicle_index + 1:02d}",
+                        vehicle_id=v["vehicle_id"],
                         route=route["route"],
                         latitude=lat,
                         longitude=lon,
@@ -95,12 +114,7 @@ def _point_at(points: list[dict[str, float]], ratio: float) -> tuple[float, floa
     return lat, lon
 
 
-def _occupancy_for(tick: int, route_index: int, vehicle_index: int) -> int:
-    wave = math.sin((tick + route_index * 3 + vehicle_index * 5) / 7)
-    base = 8 + round(wave * 5)
-    if (tick + route_index + vehicle_index) % 37 == 0:
-        return 18
-    return max(1, min(16, base + vehicle_index * 2))
+
 
 
 def _status_for(tick: int, occupancy: int, route_index: int, vehicle_index: int) -> str:

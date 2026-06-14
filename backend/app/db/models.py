@@ -1,6 +1,14 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
+
+
+class RoutePoint(BaseModel):
+    sequence_order: int
+    latitude: float
+    longitude: float
+    point_type: str
+    label: str
 
 
 class VehicleState(BaseModel):
@@ -34,3 +42,18 @@ class OperatorAlert(BaseModel):
     verification_status: str = "open"
     resolution_note: Optional[str] = None
     verified_at: Optional[str] = None
+
+
+class Vehicle(BaseModel):
+    vehicle_id: str
+    country: str
+    route: str
+    driver: str
+    max_occupancy: int
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    plate_number: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    year: Optional[int] = None
+    registration_number: Optional[str] = None
+    status: str = "active"

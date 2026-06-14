@@ -1,7 +1,5 @@
 
 from backend.app.core.transit import find_transit_suggestions
-from backend.app.core.transit import SYNTHETIC_REGIONAL_ROUTES
-from backend.app.core.transit import PLACE_DATABASE
 
 # Mock vehicles
 mock_vehicles = [

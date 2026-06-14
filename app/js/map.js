@@ -1,82 +1,232 @@
-  function drawMap(containerId, routeFilter) {
+function drawMap(containerId, routeFilter) {
     const el = qs(containerId);
     if (!el) return;
-    // If Leaflet is available, render an interactive map; else fall back to SVG renderer
-    if (typeof L !== 'undefined') {
-      // initialize map if needed
-      if (!state.maps[containerId]) {
-        const map = L.map(containerId, { zoomControl: true, attributionControl: false }).setView([10.3157, 123.8854], 13);
-        const tileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    if (typeof L === 'undefined') return;
+
+    const isMobile = containerId === 'mobileMap';
+    const isOperator = containerId === 'operatorMap' || containerId === 'routePreviewMap';
+    const isOverviewMap = containerId === "operatorMap" && !routeFilter;
+    const isRouteMap = !isOverviewMap && (Boolean(routeFilter) || containerId === "routePreviewMap" || isMobile);
+
+    // initialize map if needed
+    if (!state.maps[containerId]) {
+      const map = L.map(containerId, { zoomControl: true, attributionControl: false }).setView([10.3157, 123.8854], 13);
+      // Tile layer definitions – Transport Map is the default
+      const TILE_LAYERS = {
+        'Transport Map': L.tileLayer('https://tile.memomaps.de/tilegen/{z}/{x}/{y}.png', {
+          maxZoom: 19,
+          attribution: '&copy; <a href="https://memomaps.de/">memomaps.de</a> CC-BY-SA, map data &copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }),
+        'Standard': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           maxZoom: 19,
           attribution: '&copy; OpenStreetMap contributors'
-        }).addTo(map);
-        tileLayer.on('tileerror', function(e) {
-          if (e.tile) e.tile.style.display = 'none';
+        }),
+        'CyclOSM': L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
+          maxZoom: 20,
+          attribution: '&copy; <a href="https://github.com/cyclosm/cyclosm-cartocss-style/releases">CyclOSM</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }),
+      };
+      const tileLayer = TILE_LAYERS['Standard'].addTo(map);
+      tileLayer.on('tileerror', function(e) {
+        if (e.tile) e.tile.style.display = 'none';
+      });
+      state.maps[containerId] = map;
+      state.mapTileLayers[containerId] = TILE_LAYERS;
+      state.mapActiveTile[containerId] = tileLayer;
+      state.mapLayers[containerId] = L.layerGroup().addTo(map);
+      addMapControls(containerId, map, TILE_LAYERS, 'Standard');
+      // clustering layer
+      try {
+        state.mapClusters[containerId] = L.markerClusterGroup({
+          iconCreateFunction(cluster) {
+            const markers = cluster.getAllChildMarkers();
+            const overloaded = markers.filter(marker => marker.options.loadsenseTier === "blinking_red").length;
+            const label = overloaded ? `${markers.length}/${overloaded}` : String(markers.length);
+            return L.divIcon({ html: `<div><span>${label}</span></div>`, className: "marker-cluster marker-cluster-small", iconSize: L.point(40, 40) });
+          },
         });
-        state.maps[containerId] = map;
-        state.mapLayers[containerId] = L.layerGroup().addTo(map);
-        addMapActionControl(containerId, map);
-        // clustering layer
-        try {
-          state.mapClusters[containerId] = L.markerClusterGroup({
-            iconCreateFunction(cluster) {
-              const markers = cluster.getAllChildMarkers();
-              const overloaded = markers.filter(marker => marker.options.loadsenseTier === "blinking_red").length;
-              const label = overloaded ? `${markers.length}/${overloaded}` : String(markers.length);
-              return L.divIcon({ html: `<div><span>${label}</span></div>`, className: "marker-cluster marker-cluster-small", iconSize: L.point(40, 40) });
-            },
-          });
-          state.mapClusters[containerId].addTo(map);
-        } catch (e) {
-          state.mapClusters[containerId] = null;
-        }
+        state.mapClusters[containerId].addTo(map);
+      } catch (e) {
+        state.mapClusters[containerId] = null;
       }
-      const map = state.maps[containerId];
-      const layerGroup = state.mapLayers[containerId];
-      const clusterGroup = state.mapClusters[containerId];
-      // clear previous layers
-      layerGroup.clearLayers();
-      if (clusterGroup && clusterGroup.clearLayers) clusterGroup.clearLayers();
+      // Track user interaction to disable auto-fit
+      map.on('movestart', function (e) {
+        // Only set userInteracted for moves not triggered programmatically
+        if (!map._programmaticMove) {
+          state.userInteracted = true;
+        }
+      });
+      // Add floating re-center button
+      const recenterControl = L.control({ position: 'bottomright' });
+      recenterControl.onAdd = function () {
+        const btn = L.DomUtil.create('button', 'map-recenter-btn');
+        btn.type = 'button';
+        btn.title = 'Re-center map';
+        btn.setAttribute('aria-label', 'Re-center map');
+        btn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M12 2v3"></path>
+            <path d="M12 19v3"></path>
+            <path d="M2 12h3"></path>
+            <path d="M19 12h3"></path>
+          </svg>
+          Re-center
+        `;
+        L.DomEvent.disableClickPropagation(btn);
+        L.DomEvent.on(btn, 'click', function () {
+          state.userInteracted = false;
+          const allPoints = state.vehicles
+            .filter(v => !routeFilter || v.route === routeFilter)
+            .filter(v => Number(v.latitude) && Number(v.longitude))
+            .map(v => [Number(v.latitude), Number(v.longitude)]);
+          if (allPoints.length) {
+            map._programmaticMove = true;
+            try { map.fitBounds(L.latLngBounds(allPoints), { maxZoom: 15, padding: [28, 28] }); } catch (e) {}
+            map._programmaticMove = false;
+          }
+        });
+        return btn;
+      };
+      recenterControl.addTo(map);
+    }
+    const map = state.maps[containerId];
+    const layerGroup = state.mapLayers[containerId];
+    const clusterGroup = state.mapClusters[containerId];
+    // clear route polylines and route-point layers (redrawn each call)
+    layerGroup.clearLayers();
 
-      const routes = routeFilter ? state.routes.filter(route => route.route === routeFilter) : state.routes;
-      // draw route polylines
-      for (const route of routes) {
-        const latlngs = (route.polyline || []).map(getCoordinate).filter(Boolean).map(c => [c.latitude, c.longitude]);
-        if (latlngs.length) {
-            const selectedRoute = route.route === state.selectedRoute;
-            if (selectedRoute) {
-              L.polyline(latlngs, { color: '#ffffff', weight: 12, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(layerGroup);
-              L.polyline(latlngs, { color: '#0b57d0', weight: 8, opacity: 0.98, lineCap: 'round', lineJoin: 'round' }).addTo(layerGroup);
-              L.polyline(latlngs, { color: '#58a6ff', weight: 3, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(layerGroup);
-              
-              const stops = (route.stops || []).map((stop, i) => ({ coord: getCoordinate(stop), name: stop.name || `Stop ${i + 1}` })).filter(s => s.coord);
-              stops.forEach(stop => {
-                const marker = L.circleMarker([stop.coord.latitude, stop.coord.longitude], {
-                  radius: 5, color: '#1e293b', weight: 2, fillColor: '#ffffff', fillOpacity: 1
-                }).bindTooltip(escapeHtml(stop.name), { direction: 'top', offset: [0, -5] });
-                marker.addTo(layerGroup);
+    // Initialize incremental vehicle marker tracking
+    state.vehicleMarkers = state.vehicleMarkers || {};
+    if (!state.vehicleMarkers[containerId]) state.vehicleMarkers[containerId] = {};
+    const existingMarkers = state.vehicleMarkers[containerId];
+
+    const routes = isOverviewMap ? [] : routeFilter ? state.routes.filter(route => route.route === routeFilter) : state.routes;
+    // draw route polylines
+    for (const route of routes) {
+      const structuredPoints = [...(route.points || [])].sort((a, b) => Number(a.sequence_order || 0) - Number(b.sequence_order || 0));
+      const polyPoints = structuredPoints.length ? structuredPoints : (route.polyline || []);
+      const routeStops = structuredPoints.length ? structuredPoints : (route.stops || []);
+      // Support both new structured points and legacy [lat, lon] arrays
+      const validPoints = polyPoints.filter(p => p && (p.latitude !== undefined || Array.isArray(p)));
+      const latlngs = validPoints.map(p => Array.isArray(p) ? [Number(p[0]), Number(p[1])] : [Number(p.latitude), Number(p.longitude)]);
+      
+      if (latlngs.length) {
+          const selectedRoute = route.route === state.selectedRoute;
+          if (selectedRoute) {
+            L.polyline(latlngs, { color: '#ffffff', weight: 12, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(layerGroup);
+            L.polyline(latlngs, { color: '#0b57d0', weight: 8, opacity: 0.98, lineCap: 'round', lineJoin: 'round' }).addTo(layerGroup);
+            L.polyline(latlngs, { color: '#58a6ff', weight: 3, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }).addTo(layerGroup);
+            
+            let stopNumber = 0;
+            (routeStops.length ? routeStops : validPoints).forEach((point, idx, allPoints) => {
+              const isObj = !Array.isArray(point);
+              const ptLat = isObj ? Number(point.latitude) : Number(point[0]);
+              const ptLon = isObj ? Number(point.longitude) : Number(point[1]);
+              let type = isObj ? (point.point_type || 'checkpoint') : 'checkpoint';
+              if (idx === 0) type = 'origin';
+              if (idx === allPoints.length - 1) type = 'end';
+              // Normalize legacy 'turn' type to 'waypoint'
+              if (type === 'turn' || type === 'checkpoint') type = 'waypoint';
+
+              // Mobile shows only rider-meaningful pins, while operator route preview keeps every coordinate visible for editing/inspection.
+              if (isMobile && type !== 'origin' && type !== 'end' && type !== 'end_of_route'
+                  && type !== 'alight_or_board_stop' && type !== 'boarding_stop') {
+                return;
+              }
+
+              const label = isObj && point.label ? point.label : type.replace(/_/g, ' ');
+              let iconClass, svgIcon, iconSize, iconAnchor;
+
+              if (type === 'origin') {
+                iconClass = 'route-point-icon route-point-origin';
+                svgIcon = `<svg viewBox="0 0 32 32" width="24" height="24"><circle cx="16" cy="16" r="14" fill="#16a34a" stroke="#fff" stroke-width="2"/><text x="16" y="22" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold" font-family="sans-serif">A</text></svg>`;
+                iconSize = [24, 24];
+                iconAnchor = [12, 12];
+              } else if (type === 'end' || type === 'end_of_route') {
+                iconClass = 'route-point-icon route-point-end';
+                svgIcon = `<svg viewBox="0 0 32 32" width="24" height="24"><circle cx="16" cy="16" r="14" fill="#dc2626" stroke="#fff" stroke-width="2"/><text x="16" y="22" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold" font-family="sans-serif">B</text></svg>`;
+                iconSize = [24, 24];
+                iconAnchor = [12, 12];
+              } else if (type === 'alight_or_board_stop' || type === 'boarding_stop') {
+                stopNumber++;
+                iconClass = 'route-point-icon route-point-stop';
+                svgIcon = `<svg viewBox="0 0 28 28" width="20" height="20"><circle cx="14" cy="14" r="12" fill="#2563eb" stroke="#fff" stroke-width="2"/><text x="14" y="19" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold" font-family="sans-serif">${stopNumber}</text></svg>`;
+                iconSize = [20, 20];
+                iconAnchor = [10, 10];
+              } else if (type === 'waypoint') {
+                iconClass = 'route-point-icon route-point-waypoint';
+                svgIcon = `<svg viewBox="0 0 20 20" width="14" height="14"><rect x="3" y="3" width="14" height="14" rx="2" transform="rotate(45 10 10)" fill="#f97316" stroke="#fff" stroke-width="1.5"/></svg>`;
+                iconSize = [14, 14];
+                iconAnchor = [7, 7];
+              } else if (type === 'road_segment') {
+                iconClass = 'route-point-icon route-point-segment';
+                svgIcon = `<svg viewBox="0 0 12 12" width="8" height="8"><circle cx="6" cy="6" r="4" fill="#9ca3af"/></svg>`;
+                iconSize = [8, 8];
+                iconAnchor = [4, 4];
+              } else {
+                // Fallback: treat unknown types as waypoints
+                iconClass = 'route-point-icon route-point-waypoint';
+                svgIcon = `<svg viewBox="0 0 20 20" width="14" height="14"><rect x="3" y="3" width="14" height="14" rx="2" transform="rotate(45 10 10)" fill="#f97316" stroke="#fff" stroke-width="1.5"/></svg>`;
+                iconSize = [14, 14];
+                iconAnchor = [7, 7];
+              }
+
+              const marker = L.marker([ptLat, ptLon], {
+                icon: L.divIcon({
+                  className: iconClass,
+                  html: svgIcon,
+                  iconSize: iconSize,
+                  iconAnchor: iconAnchor,
+                }),
               });
-            } else {
-              L.polyline(latlngs, { color: '#9aa0a6', weight: 2, opacity: routeFilter ? 0.25 : 0.16, lineCap: 'round', lineJoin: 'round' }).addTo(layerGroup);
-            }
-            // start and end markers
-            const start = latlngs[0];
-            const end = latlngs[latlngs.length-1];
-            const startMarker = L.circleMarker(start, { radius: 6, color: '#fff', weight: 1, fillColor: '#045c51', fillOpacity: 1 }).bindTooltip('Start');
-            const endMarker = L.circleMarker(end, { radius: 6, color: '#fff', weight: 1, fillColor: '#2f5f98', fillOpacity: 1 }).bindTooltip('End');
-            startMarker.addTo(layerGroup);
-            endMarker.addTo(layerGroup);
-        }
+              marker.bindPopup(`<strong>${escapeHtml(label.charAt(0).toUpperCase() + label.slice(1))}</strong><br/><small>${escapeHtml(type.replace(/_/g, ' '))}</small><br/><small>LAT: ${ptLat.toFixed(5)}, LONG: ${ptLon.toFixed(5)}</small>`)
+                    .bindTooltip(escapeHtml(label), { direction: 'top', offset: [0, -5] });
+              marker.addTo(layerGroup);
+            });
+          } else if (!isOverviewMap) {
+            L.polyline(latlngs, { color: '#9aa0a6', weight: 2, opacity: routeFilter ? 0.25 : 0.16, lineCap: 'round', lineJoin: 'round' }).addTo(layerGroup);
+          }
       }
-      // draw vehicle markers
-      const vehicles = state.vehicles.filter(vehicle => !routeFilter || vehicle.route === routeFilter).filter(vehicle => Number(vehicle.latitude) && Number(vehicle.longitude));
-      for (const vehicle of vehicles) {
-        const lat = Number(vehicle.latitude);
-        const lon = Number(vehicle.longitude);
-        const tier = tierClass(vehicle.tier);
-        const icon = L.divIcon({ className: 'vehicle-icon-wrapper', html: `<span class="vehicle-div-icon ${tier}"></span>`, iconSize: [18,18], iconAnchor: [9,9] });
+    }
+    // Incremental vehicle marker updates
+    const vehicles = state.vehicles.filter(vehicle => !routeFilter || vehicle.route === routeFilter).filter(vehicle => Number(vehicle.latitude) && Number(vehicle.longitude));
+    const currentVehicleIds = new Set();
+    for (const vehicle of vehicles) {
+      const lat = Number(vehicle.latitude);
+      const lon = Number(vehicle.longitude);
+      const tier = tierClass(vehicle.tier);
+      const vid = vehicle.vehicle_id;
+      currentVehicleIds.add(vid);
+
+      if (existingMarkers[vid]) {
+        // Update existing marker position and icon
+        const existing = existingMarkers[vid];
+        existing.marker.setLatLng([lat, lon]);
+        // Update icon if tier changed
+        if (existing.tier !== vehicle.tier) {
+          const newIcon = L.divIcon({
+            className: 'vehicle-icon-wrapper',
+            html: `<span class="vehicle-div-icon ${tier}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12a3 3 0 0 1 3 3v9a2 2 0 0 1-2 2v2a1 1 0 0 1-2 0v-2H7v2a1 1 0 0 1-2 0v-2a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3Zm0 3v5h12V6H6Zm2 8a1.5 1.5 0 1 0 0 .01V14Zm8 0a1.5 1.5 0 1 0 0 .01V14Z"/></svg></span>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          });
+          existing.marker.setIcon(newIcon);
+          existing.tier = vehicle.tier;
+        }
+        // Update popup content
+        const popup = `<div class="map-popup-actions"><strong>${escapeHtml(vehicle.vehicle_id)}</strong><span>Route ${escapeHtml(vehicle.route)}</span><span>Load ${escapeHtml(String(vehicle.occupancy))}/${escapeHtml(String(vehicle.capacity))} · ETA ${escapeHtml(String(vehicle.eta_minutes))} min</span><div><button onclick="showVehicleDetailsModal('${escapeHtml(vehicle.vehicle_id)}')">Details</button><button onclick="reportVehicleIncidentModal('${escapeHtml(vehicle.vehicle_id)}','${escapeHtml(vehicle.route)}')">Report</button></div></div>`;
+        existing.marker.setPopupContent(popup);
+      } else {
+        // Create new marker
+        const icon = L.divIcon({
+          className: 'vehicle-icon-wrapper',
+          html: `<span class="vehicle-div-icon ${tier}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12a3 3 0 0 1 3 3v9a2 2 0 0 1-2 2v2a1 1 0 0 1-2 0v-2H7v2a1 1 0 0 1-2 0v-2a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3Zm0 3v5h12V6H6Zm2 8a1.5 1.5 0 1 0 0 .01V14Zm8 0a1.5 1.5 0 1 0 0 .01V14Z"/></svg></span>`,
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+        });
         const marker = L.marker([lat, lon], { icon, loadsenseTier: vehicle.tier });
-        const popup = `<strong>${escapeHtml(vehicle.vehicle_id)}</strong><br/>Route: ${escapeHtml(vehicle.route)}<br/>Load: ${escapeHtml(String(vehicle.occupancy))}/${escapeHtml(String(vehicle.capacity))}<br/>ETA: ${escapeHtml(String(vehicle.eta_minutes))} min<br/><button onclick="window.LoadSense.zoomVehicle('${escapeHtml(vehicle.vehicle_id)}')">Zoom to PUV</button><button onclick="window.LoadSense.createAlert('${escapeHtml(vehicle.vehicle_id)}','${escapeHtml(vehicle.route)}')">Flag incident</button>`;
+        const popup = `<div class="map-popup-actions"><strong>${escapeHtml(vehicle.vehicle_id)}</strong><span>Route ${escapeHtml(vehicle.route)}</span><span>Load ${escapeHtml(String(vehicle.occupancy))}/${escapeHtml(String(vehicle.capacity))} · ETA ${escapeHtml(String(vehicle.eta_minutes))} min</span><div><button onclick="showVehicleDetailsModal('${escapeHtml(vehicle.vehicle_id)}')">Details</button><button onclick="reportVehicleIncidentModal('${escapeHtml(vehicle.vehicle_id)}','${escapeHtml(vehicle.route)}')">Report</button></div></div>`;
         marker.bindPopup(popup);
         marker.bindTooltip(`${escapeHtml(vehicle.vehicle_id)} (${escapeHtml(vehicle.route)})` , { permanent: false });
         if (clusterGroup) {
@@ -84,70 +234,225 @@
         } else {
           marker.addTo(layerGroup);
         }
+        existingMarkers[vid] = { marker, tier: vehicle.tier };
       }
-      drawDestinationLayer(containerId, layerGroup);
-      setTimeout(() => { try { map.invalidateSize(); } catch (e) {} }, 150);
-      return;
     }
-    // Fallback: original SVG renderer
-    const routes = routeFilter ? state.routes.filter(route => route.route === routeFilter) : state.routes;
-    const bounds = routeBounds(routes.length ? routes : state.routes);
-    const routeLines = routes.map(route => {
-      const points = (route.polyline || []).map(getCoordinate).filter(Boolean).map(point => project(point, bounds));
-      const d = points.map((point, index) => `${index ? "L" : "M"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
-      const stops = points.map(point => `<circle class="map-stop" cx="${point.x}" cy="${point.y}" r="1.6"></circle>`).join("");
-      return `<path class="map-route" d="${d}"></path>${stops}`;
-    }).join("");
-    const vehicles = state.vehicles
-      .filter(vehicle => !routeFilter || vehicle.route === routeFilter)
-      .filter(vehicle => Number(vehicle.latitude) && Number(vehicle.longitude))
-      .map(vehicle => {
-        const point = project({ latitude: vehicle.latitude, longitude: vehicle.longitude }, bounds);
-        return `
-          <g class="map-pin">
-            <circle class="${tierClass(vehicle.tier)}" cx="${point.x}" cy="${point.y}" r="3.4"></circle>
-            <text x="${point.x}" y="${point.y + 1.1}">${escapeHtml(vehicle.vehicle_id.split("-").pop())}</text>
-          </g>
-        `;
-      }).join("");
-
-    el.innerHTML = `
-      <svg viewBox="0 0 100 100" role="img" aria-label="Route map with live PUV positions">
-        <defs>
-          <pattern id="${containerId}-grid" width="10" height="10" patternUnits="userSpaceOnUse">
-            <path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(30,45,60,.08)" stroke-width=".4"></path>
-          </pattern>
-        </defs>
-        <rect width="100" height="100" fill="url(#${containerId}-grid)"></rect>
-        ${routeLines}
-        ${vehicles}
-      </svg>
-    `;
+    // Remove markers for vehicles that no longer exist
+    for (const vid of Object.keys(existingMarkers)) {
+      if (!currentVehicleIds.has(vid)) {
+        const entry = existingMarkers[vid];
+        if (clusterGroup) {
+          clusterGroup.removeLayer(entry.marker);
+        } else {
+          layerGroup.removeLayer(entry.marker);
+        }
+        delete existingMarkers[vid];
+      }
+    }
+    drawDestinationLayer(containerId, layerGroup);
+    // Only fitBounds when user has not interacted with the map
+    if (!state.userInteracted && vehicles.length) {
+      const allPoints = vehicles.map(v => [Number(v.latitude), Number(v.longitude)]);
+      map._programmaticMove = true;
+      try { map.fitBounds(L.latLngBounds(allPoints), { maxZoom: 15, padding: [28, 28] }); } catch (e) {}
+      map._programmaticMove = false;
+    }
   }
 
-  function addMapActionControl(containerId, map) {
+  function setupRecenterButtons() {
+    const recenter = qs("recenterBtn");
+    const opRecenter = qs("opRecenterBtn");
+    if (recenter) recenter.addEventListener("click", () => {
+      const map = state.maps.mobileMap;
+      if (!map) return;
+      if (state.lastPosition) {
+        map.setView([state.lastPosition.latitude, state.lastPosition.longitude], 15);
+      } else {
+        fitRoute("mobileMap", state.selectedRoute);
+      }
+    });
+    if (opRecenter) opRecenter.addEventListener("click", () => {
+      if (state.maps.operatorMap) fitFleet("operatorMap");
+    });
+  }
+
+  function fitRoute(containerId, routeId) {
+    const map = state.maps[containerId];
+    const route = state.routes.find(item => item.route === routeId);
+    const points = (route?.polyline || []).filter(isMapCoordinate).map(point => [Number(point.latitude), Number(point.longitude)]);
+    if (map && points.length && typeof L !== "undefined") {
+      try { map.fitBounds(L.latLngBounds(points), { maxZoom: 15, padding: [28, 28] }); } catch (e) {}
+    }
+  }
+
+  function fitFleet(containerId) {
+    const map = state.maps[containerId];
+    const points = state.vehicles.filter(isMapCoordinate).map(vehicle => [Number(vehicle.latitude), Number(vehicle.longitude)]);
+    if (map && points.length && typeof L !== "undefined") {
+      try { map.fitBounds(L.latLngBounds(points), { maxZoom: 15, padding: [28, 28] }); } catch (e) {}
+    }
+  }
+
+  function previewRoute(routeId, containerId = "operatorMap") {
+    const route = state.routes.find(item => item.route === routeId);
+    if (!route) return;
+    state.selectedRoute = routeId;
+    const modal = qs("routePreviewModal");
+    if (modal && containerId === "routePreviewMap") {
+      modal.classList.remove("hidden");
+      qs("routePreviewTitle").textContent = routeDisplayTitle(route);
+      const summary = routeSummary(route);
+      qs("routePreviewMeta").textContent = `${cityName(route)} - ${summary.stopCount} stops - ${summary.vehicleCount} live PUVs`;
+    }
+    drawMap(containerId, routeId);
+    setTimeout(() => {
+      fitRoute(containerId, routeId);
+      if (containerId === "routePreviewMap" && state.maps[containerId]) {
+        state.maps[containerId].invalidateSize();
+      }
+    }, 120);
+  }
+
+  function zoomVehicle(vehicleId) {
+    const vehicle = state.vehicles.find(item => item.vehicle_id === vehicleId);
+    if (!vehicle || !isMapCoordinate(vehicle)) return;
+    state.selectedVehicleId = vehicleId;
+    state.selectedRoute = vehicle.route;
+    if (state.maps.operatorMap && typeof activateOperatorTab === "function") activateOperatorTab("opsOverview");
+    if (state.maps.mobileMap && typeof activateMobileTab === "function") activateMobileTab("mapTab");
+    const targetMapId = state.maps.operatorMap ? "operatorMap" : "mobileMap";
+    drawMap(targetMapId, vehicle.route);
+    const map = state.maps.operatorMap || state.maps.mobileMap;
+    if (map) {
+      setTimeout(() => map.setView([Number(vehicle.latitude), Number(vehicle.longitude)], 17), 100);
+    }
+  }
+
+  function addMapControls(containerId, map, tileLayers, defaultName) {
     if (typeof L === "undefined") return;
+    const isOperator = containerId === "operatorMap";
     const control = L.control({ position: "topright" });
     control.onAdd = function () {
-      const wrap = L.DomUtil.create("div", "map-action-control");
-      const button = L.DomUtil.create("button", "", wrap);
-      button.type = "button";
-      button.title = containerId === "operatorMap" ? "Center map on fleet" : "Center map on my location";
-      button.setAttribute("aria-label", button.title);
-      button.textContent = containerId === "operatorMap" ? "Fit" : "Me";
+      const wrap = L.DomUtil.create("div", "map-controls-bar");
       L.DomEvent.disableClickPropagation(wrap);
-      L.DomEvent.on(button, "click", () => {
-        if (containerId === "operatorMap") {
+      L.DomEvent.disableScrollPropagation(wrap);
+
+      // --- Layer dropdown (LEFT side) ---
+      const layerLabel = L.DomUtil.create("label", "map-controls-bar__layer-label", wrap);
+      layerLabel.setAttribute("aria-label", "Map type");
+      layerLabel.innerHTML = 'Map';
+      const select = L.DomUtil.create("select", "map-controls-bar__select", layerLabel);
+      select.id = `mapLayerSelect-${containerId}`;
+      select.setAttribute("aria-label", "Choose map type");
+      const layerOrder = ['Transport Map', 'Standard', 'CyclOSM'];
+      layerOrder.forEach(name => {
+        const option = document.createElement("option");
+        option.value = name;
+        option.textContent = name;
+        if (name === defaultName) option.selected = true;
+        select.appendChild(option);
+      });
+      L.DomEvent.on(select, "change", () => {
+        const chosen = select.value;
+        const current = state.mapActiveTile[containerId];
+        if (current) map.removeLayer(current);
+        const next = tileLayers[chosen];
+        next.addTo(map);
+        const featureLayer = state.mapLayers[containerId];
+        const clusterLayer = state.mapClusters[containerId];
+        if (featureLayer && featureLayer.bringToFront) featureLayer.bringToFront();
+        if (clusterLayer && clusterLayer.bringToFront) clusterLayer.bringToFront();
+        state.mapActiveTile[containerId] = next;
+      });
+
+      // --- Divider ---
+      const divider = L.DomUtil.create("span", "map-controls-bar__divider", wrap);
+      divider.setAttribute("aria-hidden", "true");
+
+      // --- Location / Fit button (RIGHT side) ---
+      const locBtn = L.DomUtil.create("button", "map-controls-bar__loc-btn", wrap);
+      locBtn.type = "button";
+      if (isOperator) {
+        locBtn.title = "Center map on fleet";
+        locBtn.setAttribute("aria-label", "Center map on fleet");
+        locBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
+      } else {
+        locBtn.title = "Show my location";
+        locBtn.setAttribute("aria-label", "Show my location");
+        locBtn.innerHTML = '🧍';
+      }
+      L.DomEvent.on(locBtn, "click", () => {
+        if (isOperator) {
           fitFleet(containerId);
-        } else if (state.lastPosition) {
-          map.setView([state.lastPosition.latitude, state.lastPosition.longitude], 15);
         } else {
-          fitRoute(containerId, state.selectedRoute);
+          locBtn.classList.add("map-controls-bar__loc-btn--loading");
+          if (state.lastPosition) {
+            map.setView([state.lastPosition.latitude, state.lastPosition.longitude], 16);
+            locBtn.classList.remove("map-controls-bar__loc-btn--loading");
+          } else if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                map.setView([pos.coords.latitude, pos.coords.longitude], 16);
+                locBtn.classList.remove("map-controls-bar__loc-btn--loading");
+              },
+              () => { locBtn.classList.remove("map-controls-bar__loc-btn--loading"); }
+            );
+          } else {
+            locBtn.classList.remove("map-controls-bar__loc-btn--loading");
+          }
         }
       });
+
       return wrap;
     };
     control.addTo(map);
+
+    // Start geolocation watch for non-operator maps
+    if (!isOperator && navigator.geolocation) {
+      startLocationWatch(containerId, map);
+    }
+  }
+
+  function startLocationWatch(containerId, map) {
+    // Avoid duplicate watches for the same map
+    if (state.geoWatches && state.geoWatches[containerId]) return;
+    if (!state.geoWatches) state.geoWatches = {};
+    let locationMarker = null;
+    let accuracyCircle = null;
+    state.geoWatches[containerId] = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        const acc = pos.coords.accuracy;
+        // Update shared state
+        state.lastPosition = { latitude: lat, longitude: lon };
+        // Draw / update marker and accuracy circle
+        if (!locationMarker) {
+          accuracyCircle = L.circle([lat, lon], {
+            radius: acc,
+            color: '#1a73e8',
+            fillColor: '#1a73e8',
+            fillOpacity: 0.08,
+            weight: 1.5,
+            opacity: 0.4,
+          }).addTo(map);
+          locationMarker = L.marker([lat, lon], {
+            icon: L.divIcon({
+              className: 'my-location-icon',
+              html: '<span></span>',
+              iconSize: [18, 18],
+              iconAnchor: [9, 9],
+            }),
+            zIndexOffset: 1000,
+          }).bindTooltip('My location', { direction: 'top', offset: [0, -6] }).addTo(map);
+        } else {
+          locationMarker.setLatLng([lat, lon]);
+          accuracyCircle.setLatLng([lat, lon]).setRadius(acc);
+        }
+      },
+      null,
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    );
   }
 
   function drawDestinationLayer(containerId, layerGroup) {
@@ -162,13 +467,96 @@
     }
   }
 
+  function showVehicleDetailsModal(vehicleId) {
+    const vehicle = state.vehicles.find(item => item.vehicle_id === vehicleId);
+    if (!vehicle) return;
+    const route = state.routes.find(item => item.route === vehicle.route);
+    const routeAlerts = state.incidents.filter(incident => incident.vehicle_id === vehicleId);
+    const activeAlerts = state.alerts.filter(alert => alert.vehicle_id === vehicleId);
+    const details = `
+      <div class="vehicle-detail-modal">
+        <div class="vehicle-detail-grid">
+          <div><span>Route</span><strong>${escapeHtml(vehicle.route)}</strong></div>
+          <div><span>Direction</span><strong>${escapeHtml(vehicle.direction || "unknown")}</strong></div>
+          <div><span>ETA</span><strong>${escapeHtml(String(vehicle.eta_minutes ?? "--"))} min</strong></div>
+          <div><span>Load</span><strong>${escapeHtml(String(vehicle.occupancy))}/${escapeHtml(String(vehicle.capacity))}</strong></div>
+          <div><span>Status</span><strong>${escapeHtml(vehicle.status || "active")}</strong></div>
+          <div><span>Safety</span><strong>${escapeHtml(vehicle.route_deviation?.anomaly ? "Verify route" : "On route")}</strong></div>
+        </div>
+        <section class="vehicle-history-section">
+          <h3>Route details</h3>
+          <p>${escapeHtml(route?.name || route?.description || "No route metadata available.")}</p>
+          <p class="muted">${escapeHtml(route?.origin_name || "Origin")} to ${escapeHtml(route?.destination_name || "Destination")}</p>
+        </section>
+        <section class="vehicle-history-section">
+          <h3>Verified alerts</h3>
+          ${activeAlerts.length ? activeAlerts.map(alert => `<article><strong>${escapeHtml(alert.severity)}</strong><p>${escapeHtml(alert.message)}</p><small>${escapeHtml(alert.verification_status || "open")}</small></article>`).join("") : `<p class="empty-copy">No verified alerts for this PUV.</p>`}
+        </section>
+        <section class="vehicle-history-section">
+          <h3>User reports</h3>
+          ${routeAlerts.length ? routeAlerts.slice(0, 4).map(incident => `<article><strong>${escapeHtml(incident.severity)}</strong><p>${escapeHtml(incident.message)}</p><small>${escapeHtml(incident.verification_status || "open")}</small></article>`).join("") : `<p class="empty-copy">No user incidents reported yet.</p>`}
+        </section>
+      </div>
+    `;
+    openModal({
+      title: `${vehicle.vehicle_id} details`,
+      bodyHtml: details,
+      actions: [],
+    });
+  }
+
+  function reportVehicleIncidentModal(vehicleId, routeId) {
+    const categories = ["Safety", "Route deviation", "Crowding", "Delay", "Driver conduct", "Other"];
+    openModal({
+      title: `Report incident for ${vehicleId}`,
+      bodyHtml: `
+        <form class="incident-report-form">
+          <div class="incident-context-grid">
+            <div><span>Vehicle</span><strong>${escapeHtml(vehicleId)}</strong></div>
+            <div><span>Route</span><strong>${escapeHtml(routeId)}</strong></div>
+          </div>
+          <label><span>Category</span><select id="incidentCategory">${categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("")}</select></label>
+          <label><span>Severity</span><select id="incidentSeverity"><option value="medium">Medium</option><option value="high">High</option><option value="low">Low</option></select></label>
+          <label><span>Explanation</span><textarea id="incidentExplanation" rows="4" placeholder="Describe what happened, where it happened, and whether passengers are affected."></textarea></label>
+        </form>
+      `,
+      actions: [
+        {
+          id: "submit",
+          label: "Submit report",
+          className: "primary",
+          onClick: ({ overlay, close }) => {
+            const category = overlay.querySelector("#incidentCategory")?.value || "Other";
+            const severity = overlay.querySelector("#incidentSeverity")?.value || "medium";
+            const explanation = overlay.querySelector("#incidentExplanation")?.value.trim() || "";
+            if (!explanation) {
+              if (typeof showToast === "function") showToast("Add a short incident explanation.");
+              return;
+            }
+            if (typeof createAlert === "function") {
+              createAlert(vehicleId, routeId, { category, severity, explanation, source: "user_reported" });
+            }
+            close();
+          },
+        },
+        { id: "cancel", label: "Cancel", className: "secondary", onClick: ({ close }) => close() },
+      ],
+    });
+  }
+
   function renderVehicleCard(vehicle) {
     return `
       <article class="vehicle-card">
         <div>
           <h4>${escapeHtml(vehicle.vehicle_id)} <span>Route ${escapeHtml(vehicle.route)}</span></h4>
           <p>${escapeHtml(routeName(vehicle.route))}</p>
-          <p>ETA ${vehicle.eta_minutes} min to Stop ${Number(vehicle.next_stop_id) + 1} - ${vehicle.occupancy}/${vehicle.capacity} riders - ${escapeHtml(vehicle.status || "active")}</p>
+          <div class="trip-detail-grid">
+            <span>Board:</span><strong>Stop ${Number(vehicle.next_stop_id ?? 0) + 1}</strong>
+            <span>Alight:</span><strong>Select destination</strong>
+            <span>Distance:</span><strong>--</strong>
+            <span>ETA to you:</span><strong>${escapeHtml(vehicle.eta_minutes ?? "--")} min</strong>
+            <span>Fare:</span><strong>--</strong>
+          </div>
         </div>
         <div class="vehicle-card-actions">
           <span class="occupancy-pill ${tierClass(vehicle.tier)}">${tierLabel(vehicle.tier)}</span>

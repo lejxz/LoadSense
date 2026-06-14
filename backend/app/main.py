@@ -1,15 +1,32 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from .api.routes import router as api_router
-from .core.config import config_value
+from .core.config import config_value, is_demo_mode
 from .core.demo_simulator import SyntheticFleetSimulator
 from .core.state import fleet_store
 
-app = FastAPI(title=config_value("project", "api_title", default="LoadSense Backend"))
+
 demo_simulator = SyntheticFleetSimulator(fleet_store)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Modern lifespan handler — replaces deprecated on_event."""
+    if is_demo_mode():
+        demo_simulator.start()
+    yield
+    demo_simulator.stop()
+
+
+app = FastAPI(
+    title=config_value("project", "api_title", default="LoadSense Backend"),
+    lifespan=lifespan,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,16 +42,6 @@ app.include_router(api_router, prefix=config_value("server", "api_prefix", defau
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
-
-@app.on_event("startup")
-def start_demo_simulator():
-    demo_simulator.start()
-
-
-@app.on_event("shutdown")
-def stop_demo_simulator():
-    demo_simulator.stop()
 
 
 APP_DIR = Path(__file__).resolve().parents[2] / "app"
