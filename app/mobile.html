@@ -153,17 +153,26 @@
         </section>
 
         <section class="tab-panel" id="chatTab">
-          <div class="chat-header">
+          <div class="chat-header" id="chatHeader">
             <p class="eyebrow">AI boarding assistant</p>
             <h2>Ask LoadSense</h2>
             <p>Recommendations use live ETA, occupancy tier, and route safety context.</p>
           </div>
           <div id="chatTranscript" class="chat-transcript">
-            <div class="message bot">Ask whether to board now, wait, or choose the least crowded PUV.</div>
+            <div class="message-wrapper bot-wrapper">
+              <div class="bot-avatar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+              </div>
+              <div class="message bot">Ask whether to board now, wait, or choose the least crowded PUV.</div>
+            </div>
           </div>
           <form id="chatForm" class="chat-compose">
-            <input id="chatInput" value="Should I board the next jeep or wait?" />
-            <button class="icon-button send-button" title="Send" aria-label="Send">></button>
+            <div class="chat-input-wrapper">
+              <input id="chatInput" placeholder="Type your message..." />
+            </div>
+            <button class="icon-button send-button" title="Send" aria-label="Send">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
           </form>
         </section>
 
