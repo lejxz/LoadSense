@@ -174,9 +174,9 @@ def infer_city(points: Iterable[dict[str, Any]], route_name: str = "") -> str:
     if 14.3 <= lat <= 14.9 and 120.8 <= lon <= 121.2:
         return "Metro Manila"
     if 6.9 <= lat <= 7.2 and 125.4 <= lon <= 125.8:
-        return "Davao City"
+        return "Davao Region"
     if 10.6 <= lat <= 10.8 and 122.45 <= lon <= 122.65:
-        return "Iloilo City"
+        return "Western Visayas"
     if 10.15 <= lat <= 10.55 and 123.65 <= lon <= 124.10:
         return "Cebu"
     if 13.45 <= lat <= 14.15 and 100.25 <= lon <= 100.95:
@@ -187,7 +187,15 @@ def infer_city(points: Iterable[dict[str, Any]], route_name: str = "") -> str:
         return "Hong Kong"
     if 35.55 <= lat <= 35.85 and 139.55 <= lon <= 139.9:
         return "Tokyo"
-    return "Philippines"
+    if 2.8 <= lat <= 3.4 and 101.4 <= lon <= 101.9:
+        return "Klang Valley"
+    if -6.4 <= lat <= -6.1 and 106.7 <= lon <= 107.0:
+        return "Jakarta"
+    if 10.5 <= lat <= 10.9 and 106.5 <= lon <= 106.9:
+        return "Ho Chi Minh City"
+    if 20.8 <= lat <= 21.2 and 105.6 <= lon <= 106.0:
+        return "Hanoi"
+    return "Unknown Region"
 
 
 def search_places(
@@ -236,6 +244,14 @@ def _local_places(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             name = str(point.get("name") or "").strip()
             if not name or not _valid_coord(point):
                 continue
+            
+            lower_name = name.lower()
+            if lower_name in ["origin", "end", "end of route", "waypoint", "turn", "destination"] or \
+               lower_name.startswith("stop ") or \
+               lower_name.startswith("checkpoint ") or \
+               lower_name.startswith("point "):
+                continue
+
             places.append({
                 "name": name,
                 "city": city,

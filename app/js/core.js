@@ -377,12 +377,17 @@ const api = `${location.origin}/api`;
             const summary = route.summary;
             const selected = route.route === state.selectedRoute ? " selected" : "";
             const stops = routeStopPoints(route).slice(0, 12);
+            const tagText = route.tag || route.route.replace(/^PH-/, '');
+            let rawTitle = (route.name || routeDisplayTitle(route) || "").replace(/\s*-\s*/g, ' → ');
+            if (rawTitle.toLowerCase().startsWith(tagText.toLowerCase())) {
+              rawTitle = rawTitle.substring(tagText.length).replace(/^[\s\-→:]+/, '').trim();
+            }
             return `
               <div class="route-card-premium${selected}">
                 <div class="route-card-main">
-                  <div class="route-code-pill">${escapeHtml(route.route)}</div>
+                  <div class="route-code-pill" style="text-align: center;">${escapeHtml(tagText)}</div>
                   <div class="route-info-stack">
-                    <h3>${escapeHtml(route.name || routeDisplayTitle(route))}</h3>
+                    <h3>${escapeHtml(rawTitle)}</h3>
                     <p class="route-meta">
                       <span>${summary.vehicleCount} live PUVs</span>
                       ${summary.distanceKm ? `&bull; ~${summary.distanceKm} km away` : "&bull; Near me"}
@@ -394,7 +399,19 @@ const api = `${location.origin}/api`;
                 </div>
                 
                 <div class="route-card-expanded" style="display: none;">
-                  ${stops.length ? `<ul class="route-stops-timeline">${stops.map((stop, index) => `<li><span class="stop-dot"></span>${escapeHtml(routePointCoordinateLabel(stop, index, stops.length))}</li>`).join("")}</ul>` : `<p class="route-landmarks">${escapeHtml((summary.endpoints || []).join(" &rarr; "))}</p>`}
+                  ${stops.length > 1 ? `<ul class="route-stops-timeline" style="margin-bottom: 12px;">
+                    <li><span class="stop-dot" style="background: var(--teal); border-color: var(--teal);"></span>${escapeHtml(routePointCoordinateLabel(stops[0], 0, stops.length).replace(/^Origin:\s*/, 'Origin: '))}</li>
+                    <li><span class="stop-dot" style="background: var(--destructive, #ef4444); border-color: var(--destructive, #ef4444);"></span>${escapeHtml(routePointCoordinateLabel(stops[stops.length - 1], stops.length - 1, stops.length).replace(/^End:\s*/, 'End: '))}</li>
+                  </ul>` : stops.length === 1 ? `<ul class="route-stops-timeline" style="margin-bottom: 12px;">
+                    <li><span class="stop-dot" style="background: var(--teal); border-color: var(--teal);"></span>${escapeHtml(routePointCoordinateLabel(stops[0], 0, stops.length))}</li>
+                  </ul>` : `<p class="route-landmarks" style="margin-bottom: 12px;">${escapeHtml((summary.endpoints || []).join(" &rarr; "))}</p>`}
+                  
+                  <div class="route-details-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; padding: 12px; background: #f8fafc; border-radius: 12px; border: 1px solid rgba(0,0,0,0.04);">
+                    <div><span style="color: var(--muted); display: block; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-bottom: 2px;">Distance</span><strong style="font-size: 14px; color: #1e293b; display: block; margin-top: 2px;">${route.distance_km ? route.distance_km + ' km' : '--'}</strong></div>
+                    <div><span style="color: var(--muted); display: block; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-bottom: 2px;">Type</span><strong style="font-size: 14px; color: #1e293b; display: block; margin-top: 2px; text-transform: capitalize;">${escapeHtml(route.route_type || '--').replace(/_/g, ' ')}</strong></div>
+                    <div><span style="color: var(--muted); display: block; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-bottom: 2px;">Min. Fare</span><strong style="font-size: 14px; color: #1e293b; display: block; margin-top: 2px;">${route.minimum_fare ? 'PHP ' + Number(route.minimum_fare).toFixed(2) : '--'}</strong></div>
+                    <div><span style="color: var(--muted); display: block; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-bottom: 2px;">Fare/km</span><strong style="font-size: 14px; color: #1e293b; display: block; margin-top: 2px;">${route.fare_per_km ? 'PHP ' + Number(route.fare_per_km).toFixed(2) : '--'}</strong></div>
+                  </div>
                   <div class="route-actions-row">
                     <button class="button primary outline full-width-action" data-use-and-preview-route="${escapeHtml(route.route)}" type="button">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
@@ -419,11 +436,13 @@ const api = `${location.origin}/api`;
     });
     container.querySelectorAll("[data-toggle-route]").forEach(button => {
       button.addEventListener("click", () => {
-        const body = button.closest(".route-card")?.querySelector(".route-card-body");
+        const card = button.closest(".route-card-premium");
+        if (!card) return;
+        const body = card.querySelector(".route-card-expanded");
         if (!body) return;
         const visible = body.style.display !== "none";
-        body.style.display = visible ? "none" : "grid";
-        button.textContent = visible ? "Show route details" : "Hide route details";
+        body.style.display = visible ? "none" : "block";
+        button.style.transform = visible ? "" : "rotate(90deg)";
       });
     });
   }

@@ -121,7 +121,7 @@ function findNearestRoute(lat, lon) {
       <article class="route-card">
         <div class="route-card-admin-row">
           <div>
-            <h3>${escapeHtml(r.route)} ${escapeHtml(r.name)}</h3>
+            <h3>${escapeHtml(r.route)} ${escapeHtml(r.name.replace(" - ", " → "))}</h3>
             <p>${(r.stops||[]).length} stops</p>
           </div>
           <div>
@@ -458,7 +458,7 @@ function findNearestRoute(lat, lon) {
     }
     return `
       <p>${escapeHtml(result.status)} ${routes.length} route(s) from ${escapeHtml(result.filename || 'upload')}.</p>
-      ${routes.slice(0, 5).map(route => `<article><strong>${escapeHtml(route.route)} ${escapeHtml(route.name)}</strong><p>${(route.polyline || []).length} points</p></article>`).join('')}
+      ${routes.slice(0, 5).map(route => `<article><strong>${escapeHtml(route.route)} ${escapeHtml(route.name.replace(" - ", " → "))}</strong><p>${(route.polyline || []).length} points</p></article>`).join('')}
     `;
   }
 
@@ -587,6 +587,14 @@ function findNearestRoute(lat, lon) {
     if (routeFilter) {
       routeFilter.addEventListener("change", event => {
         state.operatorRouteFilter = event.target.value || "all";
+        renderOperator();
+      });
+    }
+
+    const regionFilter = qs("regionFilter");
+    if (regionFilter) {
+      regionFilter.addEventListener("change", event => {
+        state.adminRegionFilter = event.target.value.trim();
         renderOperator();
       });
     }

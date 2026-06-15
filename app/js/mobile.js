@@ -207,14 +207,70 @@
     const lat = state.selectedDestination.latitude.toFixed(5);
     const lon = state.selectedDestination.longitude.toFixed(5);
     const best = state.tripSuggestions[0] || state.vehicles.filter(v => v.route === state.selectedRoute).sort(vehicleSort)[0];
+    
+    const title = state.selectedDestination.name || "Search Results";
+    
+    let routeInfo = "";
+    if (best) {
+        const rName = best.route_name || (typeof routeName === 'function' ? routeName(best.route) : best.route);
+        const bName = typeof normalizeStopLabel === 'function' ? normalizeStopLabel(best.boarding_stop, best.boarding_stop?.name || "waypoint") : (best.boarding_stop?.name || "waypoint");
+        const aName = typeof normalizeStopLabel === 'function' ? normalizeStopLabel(best.alighting_stop, best.alighting_stop?.name || "destination") : (best.alighting_stop?.name || "destination");
+        const eta = Math.round(Number(best.eta_minutes || 0));
+        const dist = Number(best.distance_km || 0).toFixed(1);
+        const fare = best.fare_pesos || "--";
+        
+        routeInfo = `
+          <div style="margin-top: 16px;">
+            <div style="font-size: 11px; text-transform: uppercase; font-weight: 800; color: var(--muted); margin-bottom: 8px;">Recommended Route</div>
+            
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+              <span style="background: var(--teal); color: white; padding: 4px 10px; border-radius: 8px; font-weight: 800; font-size: 14px;">${escapeHtml(best.route)}</span>
+              <div style="display: flex; flex-direction: column;">
+                <span style="font-weight: 700; color: var(--ink); font-size: 14px;">${escapeHtml(rName)}</span>
+                <span style="font-size: 12px; color: var(--muted);">🚐 <strong>${escapeHtml(best.vehicle_id)}</strong></span>
+              </div>
+            </div>
+
+            <ul class="route-stops-timeline" style="margin-bottom: 16px; margin-left: 4px;">
+              <li><span class="stop-dot" style="background: var(--teal); border-color: var(--teal);"></span>Board: <strong>${escapeHtml(bName)}</strong></li>
+              <li><span class="stop-dot" style="background: var(--destructive, #ef4444); border-color: var(--destructive, #ef4444);"></span>Alight: <strong>${escapeHtml(aName)}</strong></li>
+            </ul>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px; background: #f8fafc; border-radius: 12px; border: 1px solid rgba(0,0,0,0.04);">
+              <div><span style="color: var(--muted); display: block; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-bottom: 2px;">ETA to you</span><strong style="font-size: 14px; color: #1e293b; display: block;">~${eta} min</strong></div>
+              <div><span style="color: var(--muted); display: block; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-bottom: 2px;">Distance</span><strong style="font-size: 14px; color: #1e293b; display: block;">${dist} km</strong></div>
+              <div style="grid-column: span 2;"><span style="color: var(--muted); display: block; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-bottom: 2px;">Est. Fare</span><strong style="font-size: 14px; color: #1e293b; display: block;">PHP ${fare}</strong></div>
+            </div>
+          </div>
+        `;
+        
+        if (state.tripSuggestions.length > 1) {
+            const altPills = state.tripSuggestions.slice(1, 4).map(s => {
+                const sName = s.route_name || (typeof routeName === 'function' ? routeName(s.route) : s.route);
+                return `<span style="display: inline-block; background: #e2e8f0; color: #475569; padding: 4px 8px; border-radius: 8px; font-size: 11px; font-weight: 600; margin-right: 6px; margin-bottom: 6px;">[${escapeHtml(s.route)}] ${escapeHtml(sName)}</span>`;
+            }).join("");
+            
+            routeInfo += `
+              <div style="margin-top: 16px;">
+                <div style="font-size: 11px; text-transform: uppercase; font-weight: 800; color: var(--muted); margin-bottom: 8px;">Alternative Routes</div>
+                <div style="display: flex; flex-wrap: wrap;">${altPills}</div>
+              </div>
+            `;
+        }
+    } else {
+        routeInfo = `<p style="margin-top: 12px; color: var(--muted);">${state.tripMessage || "Unable to find a route."}</p>`;
+    }
+
     panel.classList.remove("hidden");
     panel.innerHTML = `
-      <button id="closeDestinationConfirm" class="close-sheet-btn" aria-label="Close" type="button">
+      <button id="closeDestinationConfirm" class="close-sheet-btn" aria-label="Close" type="button" style="top: 12px; right: 12px;">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
-      <strong>Search Results</strong>
-      <code>${lat}, ${lon}</code>
-      <p>${state.tripMessage || (best ? `Suggested PUV ${escapeHtml(best.vehicle_id)} on Route ${escapeHtml(best.route)} - ETA ${escapeHtml(String(best.eta_minutes || 0))} min.` : "Unable to find a route.")}</p>
+      <div style="display: flex; flex-direction: column;">
+        <strong style="font-size: 18px; color: var(--ink); display: flex; align-items: center; gap: 6px;">📍 ${escapeHtml(title)}</strong>
+        <code style="margin-top: 4px; color: var(--muted); background: rgba(0,0,0,0.04); padding: 2px 6px; border-radius: 4px; font-size: 11px; align-self: flex-start;">${lat}, ${lon}</code>
+      </div>
+      ${routeInfo}
     `;
     qs("closeDestinationConfirm").addEventListener("click", () => {
       state.showTripPanel = false;

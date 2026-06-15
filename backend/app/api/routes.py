@@ -46,6 +46,7 @@ class Telemetry(BaseModel):
     latitude: float
     longitude: float
     occupancy: int
+    capacity: Optional[int] = None
     timestamp: str
     speed_kph: Optional[float] = None
     heading: Optional[float] = None
@@ -121,6 +122,8 @@ def get_demand(country: Optional[str] = None):
 
 @router.get("/fleet")
 def get_fleet(route: Optional[str] = None, country: Optional[str] = None):
+    if country:
+        country = sqlite_store.normalize_country(country)
     active_vehicles = {v.vehicle_id: model_to_dict(v) for v in fleet_store.fleet()}
     all_vehicles = sqlite_store.list_vehicles()
     merged = []
@@ -264,6 +267,8 @@ def reset_database(country: Optional[str] = None):
 
 @router.get("/routes")
 def get_routes(route: Optional[str] = None, q: Optional[str] = None, country: Optional[str] = None, active_only: bool = False):
+    if country:
+        country = sqlite_store.normalize_country(country)
     routes = list_routes()
     if country:
         routes = [item for item in routes if item.get("country") == country]

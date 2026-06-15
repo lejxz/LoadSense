@@ -105,10 +105,12 @@ function drawMap(containerId, routeFilter) {
               // Normalize legacy 'turn' type to 'waypoint'
               if (type === 'turn' || type === 'checkpoint') type = 'waypoint';
 
-              // Mobile shows only rider-meaningful pins, while operator route preview keeps every coordinate visible for editing/inspection.
-              if (isMobile && type !== 'origin' && type !== 'end' && type !== 'end_of_route'
-                  && type !== 'alight_or_board_stop' && type !== 'boarding_stop') {
-                return;
+              // Show only rider-meaningful pins on mobile to keep the UI clean.
+              if (isMobile) {
+                if (type !== 'origin' && type !== 'end' && type !== 'end_of_route'
+                    && type !== 'alight_or_board_stop' && type !== 'boarding_stop') {
+                  return;
+                }
               }
 
               const label = isObj && point.label ? point.label : type.replace(/_/g, ' ');
@@ -184,8 +186,9 @@ function drawMap(containerId, routeFilter) {
           const newIcon = L.divIcon({
             className: 'vehicle-icon-wrapper',
             html: `<span class="vehicle-div-icon ${tier}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12a3 3 0 0 1 3 3v9a2 2 0 0 1-2 2v2a1 1 0 0 1-2 0v-2H7v2a1 1 0 0 1-2 0v-2a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3Zm0 3v5h12V6H6Zm2 8a1.5 1.5 0 1 0 0 .01V14Zm8 0a1.5 1.5 0 1 0 0 .01V14Z"/></svg></span>`,
-            iconSize: [24, 24],
-            iconAnchor: [12, 12],
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+            popupAnchor: [0, -14]
           });
           existing.marker.setIcon(newIcon);
           existing.tier = vehicle.tier;
@@ -198,8 +201,9 @@ function drawMap(containerId, routeFilter) {
         const icon = L.divIcon({
           className: 'vehicle-icon-wrapper',
           html: `<span class="vehicle-div-icon ${tier}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 3h12a3 3 0 0 1 3 3v9a2 2 0 0 1-2 2v2a1 1 0 0 1-2 0v-2H7v2a1 1 0 0 1-2 0v-2a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3Zm0 3v5h12V6H6Zm2 8a1.5 1.5 0 1 0 0 .01V14Zm8 0a1.5 1.5 0 1 0 0 .01V14Z"/></svg></span>`,
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+          popupAnchor: [0, -14]
         });
         const marker = L.marker([lat, lon], { icon, loadsenseTier: vehicle.tier });
         const popup = `<div class="map-popup-actions"><strong>${escapeHtml(vehicle.vehicle_id)}</strong><span>Route ${escapeHtml(vehicle.route)}</span><span>Load ${escapeHtml(String(vehicle.occupancy))}/${escapeHtml(String(vehicle.capacity))} · ETA ${escapeHtml(String(vehicle.eta_minutes))} min</span><div><button onclick="showVehicleDetailsModal('${escapeHtml(vehicle.vehicle_id)}')">Details</button><button onclick="reportVehicleIncidentModal('${escapeHtml(vehicle.vehicle_id)}','${escapeHtml(vehicle.route)}')">Report</button></div></div>`;

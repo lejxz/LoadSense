@@ -143,12 +143,14 @@
   box-shadow: 0 4px 14px rgba(60, 64, 67, 0.2);
 }
 
-.vehicle-div-icon { display: block; width: 18px; height: 18px; border-radius: 9px; border: 2px solid #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.vehicle-div-icon { display: block; width: 25px; height: 25px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+.vehicle-div-icon svg { width: 15px; height: 15px; fill: #fff; margin: 3px; display: block; }
 .vehicle-icon-wrapper {
   z-index: 620 !important;
 }
 .route-point-icon {
   z-index: 560 !important;
+  opacity: 0.5;
 }
 .destination-marker {
   z-index: 600 !important;

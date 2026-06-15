@@ -68,6 +68,7 @@ class SyntheticFleetSimulator:
                         latitude=lat,
                         longitude=lon,
                         occupancy=occupancy,
+                        capacity=max_occ,
                         timestamp=datetime.now(UTC).isoformat(),
                         speed_kph=0 if status == "idle" else speed_kph,
                         heading=_heading_at(points, position, direction),

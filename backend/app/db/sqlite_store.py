@@ -26,9 +26,23 @@ _connections: dict[str, sqlite3.Connection] = {}
 _db_initialized: set[str] = set()
 
 
+_COUNTRY_NAME_TO_CODE = {
+    "PHILIPPINES": "PH",
+    "THAILAND": "TH",
+    "VIETNAM": "VN",
+    "MALAYSIA": "MY",
+    "INDONESIA": "ID",
+}
+
 def normalize_country(country: str | None = None) -> str:
-    code = (country or "PH").strip().upper()
-    return code if code in COUNTRY_CODES else "PH"
+    if not country:
+        return "PH"
+    code = country.strip().upper()
+    if code in COUNTRY_CODES:
+        return code
+    if code in _COUNTRY_NAME_TO_CODE:
+        return _COUNTRY_NAME_TO_CODE[code]
+    return "PH"
 
 
 def database_path(country: str | None = None):

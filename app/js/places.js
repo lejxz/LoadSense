@@ -80,8 +80,42 @@
     return String(value || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
+  function formatPlaceTitle(place) {
+    let title = place.name;
+    if (place.city && place.city.toLowerCase() !== place.name.toLowerCase()) {
+      title += `, ${place.city}`;
+    }
+    return title;
+  }
+
   function formatPlaceSubtitle(place) {
-    return String(place?.subtitle || place?.address_text || place?.city || place?.country || '').trim();
+    let raw = String(place?.subtitle || place?.address_text || place?.city || place?.country || '').trim();
+    let parts = raw.split(',').map(p => p.trim()).filter(Boolean);
+    
+    if (place.city && place.city.toLowerCase() !== place.name.toLowerCase()) {
+      parts = parts.filter(p => p.toLowerCase() !== place.city.toLowerCase());
+    }
+    
+    if (parts.length > 1) {
+      parts[0] = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+      return `${parts[0]} • ${parts.slice(1).join(', ')}`;
+    } else if (parts.length === 1) {
+      parts[0] = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+      return parts[0];
+    }
+    return raw;
+  }
+
+  function getPlaceIcon(place) {
+    const kind = String(place?.kind || place?.osm_value || '').toLowerCase();
+    const source = String(place?.source || '').toLowerCase();
+    if (source === 'route_stop') return '🚏';
+    if (['city', 'town', 'municipality', 'administrative'].includes(kind)) return '🏢';
+    if (['village', 'suburb', 'residential', 'neighbourhood'].includes(kind)) return '🏘️';
+    if (['terminal', 'station', 'bus_stop'].includes(kind)) return '🚌';
+    if (['commercial', 'retail', 'mall'].includes(kind)) return '🛒';
+    if (['school', 'university', 'college'].includes(kind)) return '🎓';
+    return '📍';
   }
 
   function renderPlaceResults(inputId, panelId, exactMatches = null) {
@@ -109,9 +143,12 @@
       `;
     }
     html += matches.map((place, index) => `
-      <button type="button" class="${index === 0 ? 'active' : ''}" data-place-name="${escapeHtml(place.name)}" data-city="${escapeHtml(place.city || '')}" data-lat="${place.latitude || ''}" data-lon="${place.longitude || ''}" title="${escapeHtml(place.name)}">
-        <strong>${escapeHtml(place.name)}</strong>
-        <span alt="${escapeHtml(formatPlaceSubtitle(place))}">${escapeHtml(formatPlaceSubtitle(place))}</span>
+      <button type="button" class="${index === 0 ? 'active' : ''} place-result-btn" data-place-name="${escapeHtml(place.name)}" data-city="${escapeHtml(place.city || '')}" data-lat="${place.latitude || ''}" data-lon="${place.longitude || ''}" title="${escapeHtml(place.name)}">
+        <span class="place-icon">${getPlaceIcon(place)}</span>
+        <div class="place-text-stack">
+          <strong>${escapeHtml(formatPlaceTitle(place))}</strong>
+          <span alt="${escapeHtml(formatPlaceSubtitle(place))}">${escapeHtml(formatPlaceSubtitle(place))}</span>
+        </div>
       </button>
     `).join('');
 

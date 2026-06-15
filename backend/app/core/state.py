@@ -37,7 +37,14 @@ class FleetStore:
 
     def upsert_telemetry(self, payload: Any) -> VehicleState:
         previous = self._vehicles.get(payload.vehicle_id)
-        tier = get_occupancy_tier(payload.occupancy, DEFAULT_CAPACITY)
+        
+        capacity = getattr(payload, "capacity", None)
+        if capacity is None and previous:
+            capacity = getattr(previous, "capacity", None)
+        if capacity is None or capacity <= 0:
+            capacity = DEFAULT_CAPACITY
+            
+        tier = get_occupancy_tier(payload.occupancy, capacity)
         deviation = detect_route_deviation(payload.latitude, payload.longitude, payload.route)
         stop_id = nearest_stop_id(payload.route, payload.latitude, payload.longitude)
         time_of_day = parse_timestamp(payload.timestamp).hour
@@ -56,7 +63,7 @@ class FleetStore:
             latitude=payload.latitude,
             longitude=payload.longitude,
             occupancy=payload.occupancy,
-            capacity=DEFAULT_CAPACITY,
+            capacity=capacity,
             tier=tier,
             timestamp=payload.timestamp,
             eta_minutes=eta["eta_minutes"],

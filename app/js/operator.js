@@ -333,7 +333,7 @@
               <div class="route-card clean-route-card${selected}">
                 <div class="route-card-head">
                   <div>
-                    <h3>${escapeHtml(route.route)} ${escapeHtml(route.name)}</h3>
+                    <h3>${escapeHtml(route.route)} ${escapeHtml((route.name || "").replace(/\s*-\s*/g, ' → '))}</h3>
                     <p>${escapeHtml(route.zone || route.region || "")} - ${summary.stopCount} stops - ${summary.vehicleCount} live PUVs</p>
                   </div>
                   <span class="route-distance">${summary.distanceKm ? `~${summary.distanceKm} km away` : "Near me"}</span>

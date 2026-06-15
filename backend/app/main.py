@@ -47,3 +47,9 @@ def health():
 APP_DIR = Path(__file__).resolve().parents[2] / "app"
 if APP_DIR.exists():
     app.mount("/", StaticFiles(directory=APP_DIR, html=True), name="loadsense_app")
+
+
+
+
+
+
