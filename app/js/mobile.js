@@ -119,7 +119,7 @@
 
     const bestSuggestion = state.tripSuggestions[0];
     if (bestSuggestion) {
-      qs("bestVehicleTitle").textContent = `${bestSuggestion.vehicle_id} - Route ${bestSuggestion.route}`;
+      qs("bestVehicleTitle").innerHTML = `Route ${bestSuggestion.route} <span style="font-size: 16px; font-weight: 600; color: var(--muted);">${bestSuggestion.vehicle_id}</span>`;
       let bodyHtml = "";
       if (bestSuggestion.direction === "multi" && bestSuggestion.legs) {
         const l1 = bestSuggestion.legs[0];
@@ -155,29 +155,29 @@
         `;
       } else {
         bodyHtml = `
-          <div class="boarding-detail-row"><span>ETA</span><strong>${Math.round(Number(bestSuggestion.eta_minutes || 0))} min</strong></div>
-          <div class="boarding-detail-row"><span>Occupancy</span><strong>${bestSuggestion.occupancy}/${bestSuggestion.capacity}</strong></div>
-          <div class="boarding-detail-row"><span>Fare estimate</span><strong>PHP ${bestSuggestion.fare_pesos || "--"}</strong></div>
+          <div class="boarding-detail-row"><span style="display: flex; align-items: center; gap: 6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>ETA</span><strong>${Math.round(Number(bestSuggestion.eta_minutes || 0))} min</strong></div>
+          <div class="boarding-detail-row"><span style="display: flex; align-items: center; gap: 6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Occupancy</span><strong>${bestSuggestion.occupancy}/${bestSuggestion.capacity}</strong></div>
+          <div class="boarding-detail-row"><span style="display: flex; align-items: center; gap: 6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>Fare estimate</span><strong>PHP ${bestSuggestion.fare_pesos || "--"}</strong></div>
           <div class="boarding-detail-row"><span>Alternative</span><strong>${state.tripSuggestions[1] ? state.tripSuggestions[1].route_name : 'None available'}</strong></div>
         `;
       }
       qs("bestVehicleBody").innerHTML = bodyHtml;
       qs("ledPill").className = `occupancy-pill ${tierClass(bestSuggestion.tier)}`;
-      qs("ledPill").textContent = `Windshield LED: ${tierLabel(bestSuggestion.tier)}`;
+      qs("ledPill").innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: text-bottom;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>${tierLabel(bestSuggestion.tier)}`;
       qs("homeEta").textContent = `${Math.round(Number(bestSuggestion.eta_minutes || 0))}m`;
       qs("homeLoad").textContent = `${bestSuggestion.occupancy}/${bestSuggestion.capacity}`;
       qs("homeSafety").textContent = bestSuggestion.status || "active";
     } else if (best) {
         const safeText = best.route_deviation?.anomaly ? "Verify" : "Clear";
-        qs("bestVehicleTitle").textContent = `${best.vehicle_id} - ${tierLabel(best.tier)}`;
+        qs("bestVehicleTitle").innerHTML = `Route ${best.route} <span style="font-size: 16px; font-weight: 600; color: var(--muted);">${best.vehicle_id}</span>`;
         qs("bestVehicleBody").innerHTML = `
-          <div class="boarding-detail-row"><span>ETA</span><strong>${best.eta_minutes} min</strong></div>
-          <div class="boarding-detail-row"><span>Occupancy</span><strong>${best.occupancy}/${best.capacity}</strong></div>
-          <div class="boarding-detail-row"><span>Fare estimate</span><strong>--</strong></div>
+          <div class="boarding-detail-row"><span style="display: flex; align-items: center; gap: 6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>ETA</span><strong>${best.eta_minutes} min</strong></div>
+          <div class="boarding-detail-row"><span style="display: flex; align-items: center; gap: 6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>Occupancy</span><strong>${best.occupancy}/${best.capacity}</strong></div>
+          <div class="boarding-detail-row"><span style="display: flex; align-items: center; gap: 6px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>Fare estimate</span><strong>--</strong></div>
           <div class="boarding-detail-row"><span>Alternative</span><strong>None selected</strong></div>
         `;
         qs("ledPill").className = `occupancy-pill ${tierClass(best.tier)}`;
-        qs("ledPill").textContent = `Windshield LED: ${tierLabel(best.tier)}`;
+        qs("ledPill").innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px; vertical-align: text-bottom;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>${tierLabel(best.tier)}`;
         qs("homeEta").textContent = `${best.eta_minutes}m`;
         qs("homeLoad").textContent = `${best.occupancy}/${best.capacity}`;
         qs("homeSafety").textContent = safeText;
@@ -199,17 +199,62 @@
   function renderDestinationConfirm() {
     const panel = qs("destinationConfirm");
     if (!panel) return;
-    if (!state.selectedDestination || !state.showTripPanel) {
+    if (!state.selectedDestination) {
       panel.classList.add("hidden");
+      panel.classList.remove("collapsed-peek");
       panel.innerHTML = "";
       return;
     }
+    
     const lat = state.selectedDestination.latitude.toFixed(5);
     const lon = state.selectedDestination.longitude.toFixed(5);
     const best = state.tripSuggestions[0] || state.vehicles.filter(v => v.route === state.selectedRoute).sort(vehicleSort)[0];
-    
     const title = state.selectedDestination.name || "Search Results";
-    
+
+    if (!state.showTripPanel) {
+      panel.classList.remove("hidden");
+      panel.classList.add("collapsed-peek");
+      const etaText = best && best.eta_minutes ? `~${Math.round(Number(best.eta_minutes))} min away` : 'Calculating...';
+      
+      panel.innerHTML = `
+        <div class="peek-handle"></div>
+        <div class="peek-content" id="reopenTripPanel">
+          <div class="peek-info">
+            <span class="peek-title">${escapeHtml(title)}</span>
+            <span class="peek-eta">${etaText}</span>
+          </div>
+          <button id="clearTripBtn" aria-label="Clear Trip" style="padding: 6px; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; background: #f1f5f9; color: #64748b; cursor: pointer;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+      `;
+      
+      const reopenBtn = qs("reopenTripPanel");
+      if (reopenBtn) {
+        reopenBtn.addEventListener("click", (e) => {
+          if (e.target.closest("#clearTripBtn")) return;
+          state.showTripPanel = true;
+          renderMobile();
+        });
+      }
+      
+      const clearBtn = qs("clearTripBtn");
+      if (clearBtn) {
+        clearBtn.addEventListener("click", () => {
+          state.selectedDestination = null;
+          state.tripSuggestions = [];
+          state.showTripPanel = false;
+          const destInput = qs("destinationInput");
+          if (destInput) destInput.value = "";
+          renderMobile();
+        });
+      }
+      return;
+    }
+
+    panel.classList.remove("hidden");
+    panel.classList.remove("collapsed-peek");
+
     let routeInfo = "";
     if (best) {
         const rName = best.route_name || (typeof routeName === 'function' ? routeName(best.route) : best.route);
@@ -261,7 +306,6 @@
         routeInfo = `<p style="margin-top: 12px; color: var(--muted);">${state.tripMessage || "Unable to find a route."}</p>`;
     }
 
-    panel.classList.remove("hidden");
     panel.innerHTML = `
       <button id="closeDestinationConfirm" class="close-sheet-btn" aria-label="Close" type="button" style="top: 12px; right: 12px;">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>

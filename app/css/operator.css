@@ -66,6 +66,13 @@
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 16px;
+  gap: 12px;
+}
+.section-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 .ops-metrics article, .ops-panel, .ops-map-panel {
   background: var(--panel);

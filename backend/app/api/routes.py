@@ -265,6 +265,31 @@ def reset_database(country: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@router.post("/alerts/reset")
+def reset_alerts(country: Optional[str] = None):
+    try:
+        sqlite_store.delete_all_alerts(country=country)
+        fleet_store._alerts.clear()
+        return {"status": "ok", "message": "Alerts reset successfully."}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/demand/reset")
+def reset_demand(country: Optional[str] = None):
+    try:
+        from backend.app.db.sqlite_store import COUNTRY_CODES, normalize_country
+        from backend.app.core.phase2 import _demand_forecast_path
+        countries = [normalize_country(country)] if country else list(COUNTRY_CODES)
+        for code in countries:
+            path = _demand_forecast_path(code)
+            if path.exists():
+                path.unlink()
+        return {"status": "ok", "message": "Demand forecast reset successfully."}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.get("/routes")
 def get_routes(route: Optional[str] = None, q: Optional[str] = None, country: Optional[str] = None, active_only: bool = False):
     if country:

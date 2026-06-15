@@ -14,6 +14,7 @@ from backend.app.core.routes import list_routes, nearest_stop_id
 from backend.app.core.transit import find_transit_suggestions
 from backend.app.db import sqlite_store
 from backend.app.db.models import OperatorAlert, VehicleState
+from backend.app.core.chatbot import get_llm_recommendation
 
 
 def parse_timestamp(value: str) -> datetime:
@@ -155,6 +156,22 @@ class FleetStore:
         destination_latitude: Optional[float] = None,
         destination_longitude: Optional[float] = None,
     ) -> Dict[str, Any]:
+        # Try optional LLM integration
+        llm_response = get_llm_recommendation(
+            fleet_store=self,
+            route=route,
+            query=query,
+            country=country,
+            origin_text=origin_text,
+            origin_latitude=origin_latitude,
+            origin_longitude=origin_longitude,
+            destination=destination,
+            destination_latitude=destination_latitude,
+            destination_longitude=destination_longitude,
+        )
+        if llm_response is not None:
+            return llm_response
+
         if self._is_greeting_or_smalltalk(query):
             answer = "Hello. Tell me your current location and destination, and I can recommend the best route and PUV."
             sqlite_store.save_chat_query("chat", query, answer, datetime.now(UTC).isoformat())

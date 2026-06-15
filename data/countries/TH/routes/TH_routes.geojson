@@ -8,10 +8,10 @@
         "route_name": "BTS Sukhumvit Line",
         "route_type": "TRAIN",
         "route_ref": "BTS-SUK",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Start Station",
+        "destination_name": "End Station",
+        "region": "Bangkok",
+        "province": "Bangkok"
       },
       "geometry": {
         "type": "LineString",
@@ -1374,10 +1374,10 @@
         "route_name": "BTS Silom Line",
         "route_type": "TRAIN",
         "route_ref": "BTS-SIL",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Start Station",
+        "destination_name": "End Station",
+        "region": "Bangkok",
+        "province": "Bangkok"
       },
       "geometry": {
         "type": "LineString",
@@ -1920,10 +1920,10 @@
         "route_name": "MRT Blue Line",
         "route_type": "TRAIN",
         "route_ref": "MRT-BLU",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Start Station",
+        "destination_name": "End Station",
+        "region": "Bangkok",
+        "province": "Bangkok"
       },
       "geometry": {
         "type": "LineString",
@@ -2982,10 +2982,10 @@
         "route_name": "Bus 1: Sanam Luang - Mo Chit",
         "route_type": "BUS",
         "route_ref": "BUS1",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Sanam Luang",
+        "destination_name": "Mo Chit",
+        "region": "Bangkok",
+        "province": "Bangkok"
       },
       "geometry": {
         "type": "LineString",
@@ -3972,10 +3972,10 @@
         "route_name": "Bus 2: Samrong - Asok",
         "route_type": "BUS",
         "route_ref": "BUS2",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Samrong",
+        "destination_name": "Asok",
+        "region": "Bangkok",
+        "province": "Bangkok"
       },
       "geometry": {
         "type": "LineString",
@@ -5146,10 +5146,10 @@
         "route_name": "Bus 3: Bang Kapi - Victory Monument",
         "route_type": "BUS",
         "route_ref": "BUS3",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Bang Kapi",
+        "destination_name": "Victory Monument",
+        "region": "Bangkok",
+        "province": "Bangkok"
       },
       "geometry": {
         "type": "LineString",
@@ -6144,10 +6144,10 @@
         "route_name": "Bus 4: Hua Lamphong - MBK",
         "route_type": "BUS",
         "route_ref": "BUS4",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Hua Lamphong",
+        "destination_name": "MBK",
+        "region": "Bangkok",
+        "province": "Bangkok"
       },
       "geometry": {
         "type": "LineString",
@@ -6534,10 +6534,10 @@
         "route_name": "Bus 5: Khaosan - Pratunam",
         "route_type": "BUS",
         "route_ref": "BUS5",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Khaosan",
+        "destination_name": "Pratunam",
+        "region": "Bangkok",
+        "province": "Bangkok"
       },
       "geometry": {
         "type": "LineString",
@@ -7476,10 +7476,10 @@
         "route_name": "Bus 6: Ekkamai - Suvarnabhumi",
         "route_type": "BUS",
         "route_ref": "BUS6",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Ekkamai",
+        "destination_name": "Suvarnabhumi",
+        "region": "Bangkok",
+        "province": "Bangkok"
       },
       "geometry": {
         "type": "LineString",
@@ -9418,10 +9418,10 @@
         "route_name": "Bus 7: Don Mueang - Mochit",
         "route_type": "BUS",
         "route_ref": "BUS7",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Don Mueang",
+        "destination_name": "Mochit",
+        "region": "Bangkok",
+        "province": "Bangkok"
       },
       "geometry": {
         "type": "LineString",

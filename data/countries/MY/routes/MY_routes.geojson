@@ -8,10 +8,10 @@
         "route_name": "Kelana Jaya Line",
         "route_type": "TRAIN",
         "route_ref": "KJL",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Start Station",
+        "destination_name": "End Station",
+        "region": "Klang Valley",
+        "province": "Klang Valley"
       },
       "geometry": {
         "type": "LineString",
@@ -4426,10 +4426,10 @@
         "route_name": "Ampang Line",
         "route_type": "TRAIN",
         "route_ref": "AMP",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Start Station",
+        "destination_name": "End Station",
+        "region": "Klang Valley",
+        "province": "Klang Valley"
       },
       "geometry": {
         "type": "LineString",
@@ -6412,10 +6412,10 @@
         "route_name": "Sri Petaling Line",
         "route_type": "TRAIN",
         "route_ref": "SPL",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Start Station",
+        "destination_name": "End Station",
+        "region": "Klang Valley",
+        "province": "Klang Valley"
       },
       "geometry": {
         "type": "LineString",
@@ -9538,10 +9538,10 @@
         "route_name": "KL Monorail",
         "route_type": "TRAIN",
         "route_ref": "MONO",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Start Station",
+        "destination_name": "End Station",
+        "region": "Klang Valley",
+        "province": "Klang Valley"
       },
       "geometry": {
         "type": "LineString",
@@ -10768,10 +10768,10 @@
         "route_name": "GoKL City Bus - Green Line",
         "route_type": "BUS",
         "route_ref": "GOKL-G",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "GoKL City Bus",
+        "destination_name": "Green Line",
+        "region": "Klang Valley",
+        "province": "Klang Valley"
       },
       "geometry": {
         "type": "LineString",
@@ -11326,10 +11326,10 @@
         "route_name": "GoKL City Bus - Purple Line",
         "route_type": "BUS",
         "route_ref": "GOKL-P",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "GoKL City Bus",
+        "destination_name": "Purple Line",
+        "region": "Klang Valley",
+        "province": "Klang Valley"
       },
       "geometry": {
         "type": "LineString",
@@ -12326,8 +12326,8 @@
         "route_ref": "U82",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Klang Valley",
+        "province": "Klang Valley"
       },
       "geometry": {
         "type": "LineString",
@@ -13636,8 +13636,8 @@
         "route_ref": "U83",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Klang Valley",
+        "province": "Klang Valley"
       },
       "geometry": {
         "type": "LineString",
@@ -14782,8 +14782,8 @@
         "route_ref": "U84",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Klang Valley",
+        "province": "Klang Valley"
       },
       "geometry": {
         "type": "LineString",
@@ -16116,8 +16116,8 @@
         "route_ref": "U85",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Klang Valley",
+        "province": "Klang Valley"
       },
       "geometry": {
         "type": "LineString",

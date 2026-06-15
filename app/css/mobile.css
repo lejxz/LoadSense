@@ -1139,3 +1139,23 @@ summary.route-card-head {
 .p-0 { padding: 0; }
 .mb-0 { margin-bottom: 0; }
 .relative { position: relative; }
+
+.zoom-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50% !important;
+  background: var(--wash);
+  border: 1px solid var(--line) !important;
+  color: var(--teal);
+}
+.zoom-btn:hover {
+  background: var(--line);
+}
+.zoom-btn svg {
+  width: 16px;
+  height: 16px;
+}

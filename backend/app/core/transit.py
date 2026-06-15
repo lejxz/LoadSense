@@ -673,7 +673,7 @@ def _destination_matches_with_origin_boarding(
             "score": round(score, 1),
             "boarding_stop": board,
             "walking_distance_meters": round(board["distance_meters"], 0),
-            "fare_pesos": estimate_fare(points, board["index"], alight["index"]),
+            "fare_pesos": estimate_fare(points, board["index"], alight["index"], route.get("minimum_fare"), route.get("fare_per_km")),
         })
     adjusted.sort(key=lambda item: (item["score"], item["route_name"] or ""))
     return adjusted[:12]
@@ -824,7 +824,7 @@ def find_matching_routes(
                 * coverage_ratio,
                 3,
             ),
-            "fare_pesos": estimate_fare(points, board_idx, alight_idx),
+            "fare_pesos": estimate_fare(points, board_idx, alight_idx, route.get("minimum_fare"), route.get("fare_per_km")),
         })
     matches.sort(key=lambda item: (
         item["score"],
@@ -911,7 +911,7 @@ def find_multi_leg_routes(
                     "walking_distance_meters": round(board1["distance_meters"], 0),
                     "destination_walk_meters": round(alight2["distance_meters"], 0),
                     "transfer_walk_meters": round(best_transfer_dist, 0),
-                    "fare_pesos": estimate_fare(pts1, board1["index"], p1["index"]) + estimate_fare(pts2, p2["index"], alight2["index"]),
+                    "fare_pesos": estimate_fare(pts1, board1["index"], p1["index"], r1.get("minimum_fare"), r1.get("fare_per_km")) + estimate_fare(pts2, p2["index"], alight2["index"], r2.get("minimum_fare"), r2.get("fare_per_km")),
                 })
                 
     matches.sort(key=lambda item: item["score"])
@@ -938,14 +938,18 @@ def route_points(route: dict[str, Any], prefer_stops: bool = False) -> list[dict
     return result
 
 
-def estimate_fare(points: list[dict[str, Any]], board_index: int, alight_index: int) -> int:
+def estimate_fare(points: list[dict[str, Any]], board_index: int, alight_index: int, minimum_fare: float = None, fare_per_km: float = None) -> int:
     start = min(board_index, alight_index)
     end = max(board_index, alight_index)
     distance = 0.0
     for left, right in zip(points[start:end], points[start + 1:end + 1]):
         distance += haversine_meters(left["latitude"], left["longitude"], right["latitude"], right["longitude"])
     km = distance / 1000.0
-    return int(round(max(13.0, 13.0 + max(0.0, km - 4.0) * 2.25)))
+    
+    min_fare = float(minimum_fare) if minimum_fare is not None else 13.0
+    per_km = float(fare_per_km) if fare_per_km is not None else 2.25
+    
+    return int(round(max(min_fare, min_fare + max(0.0, km - 4.0) * per_km)))
 
 
 def format_suggestion_answer(

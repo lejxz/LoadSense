@@ -61,7 +61,7 @@ class SyntheticFleetSimulator:
                     max_occ = v.get("max_occupancy", 20)
                     occupancy = max(0, min(max_occ, int(max_occ * 0.4 + wave * max_occ * 0.3)))
                     
-                    status = _status_for(tick, occupancy, route_index, vehicle_index)
+                    status = _status_for(tick, occupancy, max_occ, route_index, vehicle_index)
                     payload = SimpleNamespace(
                         vehicle_id=v["vehicle_id"],
                         route=route["route"],
@@ -118,10 +118,10 @@ def _point_at(points: list[dict[str, float]], ratio: float) -> tuple[float, floa
 
 
 
-def _status_for(tick: int, occupancy: int, route_index: int, vehicle_index: int) -> str:
-    if (tick + route_index * 2 + vehicle_index) % 41 == 0:
+def _status_for(tick: int, occupancy: int, max_occupancy: int, route_index: int, vehicle_index: int) -> str:
+    if (tick + route_index * 2 + vehicle_index) % 401 == 0:
         return "idle"
-    if occupancy >= 16:
+    if occupancy >= max_occupancy:
         return "full"
     return "active"
 

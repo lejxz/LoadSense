@@ -8,10 +8,10 @@
         "route_name": "Bus 1: Ben Thanh - Cho Lon",
         "route_type": "BUS",
         "route_ref": "BUS1",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Ben Thanh",
+        "destination_name": "Cho Lon",
+        "region": "Ho Chi Minh City",
+        "province": "Ho Chi Minh City"
       },
       "geometry": {
         "type": "LineString",
@@ -938,10 +938,10 @@
         "route_name": "Bus 2: Mien Dong - Mien Tay",
         "route_type": "BUS",
         "route_ref": "BUS2",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Mien Dong",
+        "destination_name": "Mien Tay",
+        "region": "Ho Chi Minh City",
+        "province": "Ho Chi Minh City"
       },
       "geometry": {
         "type": "LineString",
@@ -2932,10 +2932,10 @@
         "route_name": "Bus 3: District 1 - District 7",
         "route_type": "BUS",
         "route_ref": "BUS3",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "District 1",
+        "destination_name": "District 7",
+        "region": "Ho Chi Minh City",
+        "province": "Ho Chi Minh City"
       },
       "geometry": {
         "type": "LineString",
@@ -3834,10 +3834,10 @@
         "route_name": "Bus 4: Airport - City Center",
         "route_type": "BUS",
         "route_ref": "BUS4",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Airport",
+        "destination_name": "City Center",
+        "region": "Ho Chi Minh City",
+        "province": "Ho Chi Minh City"
       },
       "geometry": {
         "type": "LineString",
@@ -5300,10 +5300,10 @@
         "route_name": "Bus 5: Hanoi Old Quarter - Giap Bat",
         "route_type": "BUS",
         "route_ref": "BUS5",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Hanoi Old Quarter",
+        "destination_name": "Giap Bat",
+        "region": "Hanoi",
+        "province": "Hanoi"
       },
       "geometry": {
         "type": "LineString",
@@ -6150,10 +6150,10 @@
         "route_name": "Bus 6: Hanoi Railway - Noi Bai",
         "route_type": "BUS",
         "route_ref": "BUS6",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "Hanoi Railway",
+        "destination_name": "Noi Bai",
+        "region": "Hanoi",
+        "province": "Hanoi"
       },
       "geometry": {
         "type": "LineString",
@@ -7884,10 +7884,10 @@
         "route_name": "Bus 7: My Dinh - Long Bien",
         "route_type": "BUS",
         "route_ref": "BUS7",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "My Dinh",
+        "destination_name": "Long Bien",
+        "region": "Hanoi",
+        "province": "Hanoi"
       },
       "geometry": {
         "type": "LineString",
@@ -9522,10 +9522,10 @@
         "route_name": "Bus 8: HCMC D1 - Thu Duc",
         "route_type": "BUS",
         "route_ref": "BUS8",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "HCMC D1",
+        "destination_name": "Thu Duc",
+        "region": "Ho Chi Minh City",
+        "province": "Ho Chi Minh City"
       },
       "geometry": {
         "type": "LineString",
@@ -10896,10 +10896,10 @@
         "route_name": "Bus 9: HCMC D3 - Tan Binh",
         "route_type": "BUS",
         "route_ref": "BUS9",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "HCMC D3",
+        "destination_name": "Tan Binh",
+        "region": "Ho Chi Minh City",
+        "province": "Ho Chi Minh City"
       },
       "geometry": {
         "type": "LineString",
@@ -11878,10 +11878,10 @@
         "route_name": "Bus 10: HCMC D5 - D10",
         "route_type": "BUS",
         "route_ref": "BUS10",
-        "origin_name": "Origin",
-        "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "origin_name": "HCMC D5",
+        "destination_name": "D10",
+        "region": "Ho Chi Minh City",
+        "province": "Ho Chi Minh City"
       },
       "geometry": {
         "type": "LineString",

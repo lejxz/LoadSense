@@ -57,11 +57,15 @@
     return `
       <article class="vehicle-card suggestion-card">
         <div class="vehicle-card-content">
-          <h4>${escapeHtml(suggestion.vehicle_id)} <span>Route ${escapeHtml(suggestion.route)}</span></h4>
+          <h4>Route ${escapeHtml(suggestion.route)} <span style="font-size: 14px; font-weight: 600; color: var(--muted);">${escapeHtml(suggestion.vehicle_id)}</span></h4>
           <p class="route-name" style="margin-bottom: 12px;">${escapeHtml(rName)}</p>
+          
+          <ul class="route-stops-timeline" style="margin-bottom: 16px; margin-left: 4px;">
+            <li><span class="stop-dot" style="background: var(--teal); border-color: var(--teal);"></span>Board: <strong>${escapeHtml(bName || "nearest stop")}</strong></li>
+            <li><span class="stop-dot" style="background: var(--destructive, #ef4444); border-color: var(--destructive, #ef4444);"></span>Alight: <strong>${escapeHtml(aName || "destination")}</strong></li>
+          </ul>
+
           <div class="trip-detail-grid">
-            <div style="color: var(--muted);">Board:</div> <div><strong>${escapeHtml(bName || "nearest stop")}</strong>${boardCoords ? `<div class="muted">(${escapeHtml(boardCoords)})</div>` : ""}</div>
-            <div style="color: var(--muted);">Alight:</div> <div><strong>${escapeHtml(aName || "destination")}</strong>${alightCoords ? `<div class="muted">(${escapeHtml(alightCoords)})</div>` : ""}</div>
             <div style="color: var(--muted);">Distance:</div> <div>${Number(suggestion.distance_km || 0).toFixed(1)} km</div>
             <div style="color: var(--muted);">Applicability:</div> <div>${Math.round(Number(suggestion.route_applicability || 0) * 100)}%</div>
             <div style="color: var(--muted);">ETA to you:</div> <div>~${Math.round(Number(suggestion.eta_minutes || 0))} min</div>
@@ -70,7 +74,9 @@
         </div>
         <div class="vehicle-card-actions">
           <span class="occupancy-pill ${tierClass(suggestion.tier)}">${tierLabel(suggestion.tier)}</span>
-          <button class="mini-action" data-zoom-vehicle="${escapeHtml(suggestion.vehicle_id)}">Zoom</button>
+          <button class="mini-action zoom-btn" data-zoom-vehicle="${escapeHtml(suggestion.vehicle_id)}" title="Zoom on Map" aria-label="Zoom on Map">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+          </button>
         </div>
       </article>
     `;

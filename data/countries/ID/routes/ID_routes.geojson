@@ -10,8 +10,8 @@
         "route_ref": "K1",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Jakarta",
+        "province": "Jakarta"
       },
       "geometry": {
         "type": "LineString",
@@ -2200,8 +2200,8 @@
         "route_ref": "K2",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Jakarta",
+        "province": "Jakarta"
       },
       "geometry": {
         "type": "LineString",
@@ -3722,8 +3722,8 @@
         "route_ref": "K3",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Jakarta",
+        "province": "Jakarta"
       },
       "geometry": {
         "type": "LineString",
@@ -5432,8 +5432,8 @@
         "route_ref": "K4",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Jakarta",
+        "province": "Jakarta"
       },
       "geometry": {
         "type": "LineString",
@@ -7094,8 +7094,8 @@
         "route_ref": "K5",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Jakarta",
+        "province": "Jakarta"
       },
       "geometry": {
         "type": "LineString",
@@ -9432,8 +9432,8 @@
         "route_ref": "K6",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Jakarta",
+        "province": "Jakarta"
       },
       "geometry": {
         "type": "LineString",
@@ -11138,8 +11138,8 @@
         "route_ref": "K7",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Jakarta",
+        "province": "Jakarta"
       },
       "geometry": {
         "type": "LineString",
@@ -12604,8 +12604,8 @@
         "route_ref": "K8",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Jakarta",
+        "province": "Jakarta"
       },
       "geometry": {
         "type": "LineString",
@@ -14970,8 +14970,8 @@
         "route_ref": "K9",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Jakarta",
+        "province": "Jakarta"
       },
       "geometry": {
         "type": "LineString",
@@ -17860,8 +17860,8 @@
         "route_ref": "K10",
         "origin_name": "Origin",
         "destination_name": "Destination",
-        "region": "Other",
-        "province": "Other"
+        "region": "Jakarta",
+        "province": "Jakarta"
       },
       "geometry": {
         "type": "LineString",

@@ -635,6 +635,32 @@ function findNearestRoute(lat, lon) {
       refreshAuxiliaryData().then(() => renderOperator()).catch(() => {});
       showToast("Demo data reset.");
     });
+    qs("resetAlertsBtn")?.addEventListener("click", async () => {
+      const confirmed = await confirmAction({
+        title: "Reset Alerts",
+        message: "Clear all alert data and reset alert simulation?",
+        confirmText: "Reset",
+        danger: true,
+      });
+      if (!confirmed) return;
+      await getJson("/alerts/reset", { method: "POST" });
+      await refreshData({ includeAuxiliary: false });
+      renderOperator();
+      showToast("Alerts reset.");
+    });
+    qs("resetDemandBtn")?.addEventListener("click", async () => {
+      const confirmed = await confirmAction({
+        title: "Reset Demand Forecasting",
+        message: "Clear demand forecast and generate dynamic simulation data?",
+        confirmText: "Reset",
+        danger: true,
+      });
+      if (!confirmed) return;
+      await getJson("/demand/reset", { method: "POST" });
+      await refreshData({ includeAuxiliary: false });
+      renderOperator();
+      showToast("Demand Forecasting reset.");
+    });
     const fleetCountryFilter = qs("fleetCountryFilter");
     if (fleetCountryFilter) {
       fleetCountryFilter.addEventListener("change", async event => {

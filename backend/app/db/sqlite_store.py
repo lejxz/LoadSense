@@ -894,6 +894,16 @@ def reset_database(country: str | None = None) -> None:
     _LAST_TELEMETRY_LOG_WRITE.clear()
 
 
+def delete_all_alerts(country: str | None = None) -> None:
+    countries = [normalize_country(country)] if country else list(COUNTRY_CODES)
+    for code in countries:
+        init_db(code)
+        conn = _get_connection(code)
+        conn.execute("DELETE FROM operator_alerts")
+        conn.execute("DELETE FROM operator_feedback")
+        conn.commit()
+
+
 def seed_demo_vehicles(vehicles_per_route: int = 3, conn: sqlite3.Connection | None = None) -> int:
     """Seed demo vehicles — reduced to 3 per route for lean demo."""
     active_conn = conn or _get_connection()
