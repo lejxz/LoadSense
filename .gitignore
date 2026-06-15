@@ -5,6 +5,7 @@ __pycache__/
 .vscode/
 *.pyc
 *.pkl
+data/countries/**/*.sqlite
 data/countries/**/*.sqlite-shm
 data/countries/**/*.sqlite-wal
 *.sqlite-journal
