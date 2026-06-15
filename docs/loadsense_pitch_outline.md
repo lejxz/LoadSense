@@ -1,7 +1,7 @@
-# 🎬 LoadSense — 5-Minute Pitch Video Outline
+# 🎬 LoadSense — 5-Minute Pitch Video Script
 ### Team FlowerBoys · USJR · ASEAN AI Hackathon 2026
 
-> **Format:** Animated PowerPoint presentation.  
+> **Format:** Animated PowerPoint presentation / Video Script.  
 > **Style:** Pictures/illustrations animated ppt slides, side-by-side demo video layout for solution section.  
 
 ---
@@ -10,60 +10,57 @@
 
 | Section | Duration | Cumulative |
 |---|---|---|
-| 1. Hook | 0:15 | 0:15 |
-| 2. Team & Product Introduction | 0:25 | 0:40 |
-| 3. Problem | 0:45 | 1:25 |
-| 4. Target Segments | 0:20 | 1:45 |
-| 5. Solution & Demo | 1:50 | 3:35 |
-| 6. Business Model | 0:40 | 4:15 |
+| 1. Hook (LED Strip Logic) | 0:20 | 0:20 |
+| 2. Team & Product Introduction | 0:20 | 0:40 |
+| 3. Problem & Differentiation | 0:45 | 1:25 |
+| 4. Target Segments | 0:15 | 1:40 |
+| 5. Solution: The AI Workflow & Demo | 1:50 | 3:30 |
+| 6. Business Model & Costing | 0:45 | 4:15 |
 | 7. Closing / Call to Action | 0:45 | 5:00 |
 
 ---
 
-## 🎬 SECTION 1 — Hook (0:15)
+## 🎬 SECTION 1 — Hook (0:20)
 
-**Visuals & Voice Over:**
-> **Voice-over (Kent):** "Every second wasted at a jeepney stop is a problem we already solved."*
-- Black scren then Slide 1 fades in along with the voice over.
-- Slide 1: Picture of **Kent** at a designated stop — casual, looking. (with bubble dialogue)
-- Slide 2: Picture of jeepney arrives animated → Jeepney is full. (with bubble dialogue)
-- Slide 3: Sad **Kent** picture. Clock ticks. Text fades in: **"5+ minutes. No information. No alternative."**
-> **Voice-over (Kent):** *"That's Kent. He knows the specific jeepney route he needs — but not if it's full. It arrives. It's packed. He waits again. All because the information could have existed... and nobody gave it to him."*
+**Visuals:**
+- Black screen then Slide 1 fades in along with the voice-over.
+- **Slide 1:** Picture of a student (**Kent**) waiting at a designated stop. A jeepney approaches with a **Red LED strip** glowing brightly on its dashboard.
+- **Slide 2:** The jeepney drives past because it's full. Kent looks sad and frustrated. Clock ticks.
+- **Slide 3:** *Rewind effect!* Back to the stop. A different jeepney approaches, this time with a **Green LED strip**.
+- **Slide 4:** Kent smiles, waves it down, and easily boards the jeepney. 
+
+**Voice-over (Kent):**
+> *"Every day, thousands of students wait at jeepney stops, guessing if the next ride has space. Jeepney comes, red LED? It's full. You're left sad and late. But what if the jeepney arrives with a green LED? You know there's a seat for you. You board, you're happy, you're on time. With LoadSense, we take the guesswork out of commuting."*
 
 **Transition:** LoadSense logo animation.
 
 ---
 
-## 🎬 SECTION 2 — Team & Product Introduction (0:25) 
+## 🎬 SECTION 2 — Team & Product Introduction (0:20) 
 
 **Visuals:**
 - Team name card: **"Team FlowerBoys"** with USJR branding.
-- [Optional] Videos of members slide in wiht a toy car/jeep in hand (smiling). {Different PUV each mem jeep, modeern jeep, beep(mini bus), bus}
-- LoadSense logo animates in with tagline.
+- LoadSense logo animates in with the tagline.
 
-**Voice-over:**
-> *"We are Team FlowerBoys from the University of San Jose–Recoletos, Cebu. And we are proud to introduce **LoadSense** — an intelligent transportation platform that brings real-time occupancy and transit intelligence to every PUV on the road."*
+**Voice-over (Perejan):**
+> *"We are Team FlowerBoys from the University of San Jose–Recoletos, Cebu. And we are proud to introduce **LoadSense** — an intelligent transportation platform that brings Edge AI and real-time transit intelligence to every PUV on the road."*
 
 ---
 
-## 🎬 SECTION 3 — Problem (0:45)
-
-> *Lead with the pain, back it with data.*
+## 🎬 SECTION 3 — Problem & Differentiation (0:45)
 
 **Visuals (animated infographic slides):**
 - Map of Cebu with congested route indicators pulsing red.
 - Stat card animate-in: **"₱3.5 Billion lost daily"** to traffic congestion.
-- Stat card: **"20+ minute peak wait times"** reported by Filipino commuters.
-- image: Overcrowded jeepney/Modern jeepney → **"Illegal overloading"**.
-- SDG 11 badge → highlight **Target 11.2**: *"Access to safe, affordable, accessible, and sustainable transport systems for all."*
-- SDG 9 badge: *"Industry, Innovation, and Infrastructure"*
+- App comparison visual: Google Maps logo vs. LoadSense logo. Google Maps shows a route line; LoadSense shows the route line *plus* live jeepney capacity bubbles.
 
-**Voice-over:**
-> *"The Philippine public transport system faces a three-layered crisis. First — commuters have **no visibility**. They cannot tell if the jeepney coming toward them is full, half-empty, or minutes away. Second — **illegal overloading** is rampant and goes undetected because operators have no live monitoring tools. Third — this information gap disproportionately hurts **low-income commuters** who depend on jeepneys the most — the very people SDG 11.2 and 9 is meant to protect. Traffic congestion alone costs the Philippine economy ₱3.5 billion every single day."*
+**Voice-over (Kent):**
+> *"The Philippine public transport system lacks visibility. Commuters don't know if a jeepney is minutes away, or if it's already full. You might ask, 'Why not just use Google Maps or standard transit apps?' While Google Maps is great for static routes and traffic estimations, it has **zero real-time capacity awareness** for informal transit like jeepneys. It doesn't know if the jeep is packed or empty.*
+> *LoadSense bridges this exact data gap. We don't just tell you where the jeepney is; we tell you if you can actually fit inside it."*
 
 ---
 
-## 🎬 SECTION 4 — Target Segments (0:20)
+## 🎬 SECTION 4 — Target Segments (0:15)
 
 **Visuals:** Three animated cards appear side by side.
 
@@ -71,74 +68,53 @@
 |---|---|---|
 | Need real-time ride info | Need fleet oversight tools | Need compliance data & enforcement |
 
-**Voice-over:**
-> *"LoadSense serves three interconnected segments: **commuters** who need live ride information, **PUV operators and cooperatives** who need fleet management tools, and **local government units and LTFRB** who need data-driven transport compliance and planning."*
+**Voice-over (Perejan):**
+> *"LoadSense serves three groups: **commuters** needing live ride info, **PUV cooperatives** needing fleet management, and **LGUs** needing data-driven transport compliance."*
 
 ---
 
-## 🎬 SECTION 5 — Solution & Demo (1:50)
+## 🎬 SECTION 5 — Solution: The AI Workflow & Demo (1:50)
 
-> *Side-by-side layout: Demo video on the RIGHT, speaker on the LEFT.*  
-> *Perejan and Kent alternate per feature — each to 2–3 sentences max.*
+### 5A — The AI Workflow under the hood (0:40)
 
----
+**[Kent]**
+**Visual:** 3D or schematic diagram of a jeepney interior. Highlights an Overhead Camera connected to a Raspberry Pi/Jetson Nano. Arrows point to the external LED strip and up to a Cloud Database. Snippets of YOLO bounding boxes detecting people.
 
-### 5A — User / Mobile App (1:00)
-
-**[Kent — Feature 2]**
-**Visual:** App screen showing live map with color-coded jeepneys (🟢🟡🔴🔴).
-
-> *"**Live Occupancy & GPS Monitoring.** Open LoadSense and instantly see every PUV on your route — color-coded Green, Yellow, or Red — so you know whether to board or wait before the jeepney even reaches you."*
+> *"Because this is an AI hackathon, let's look at our engine. How do we know the occupancy? We use **Edge AI**. Inside the jeepney, an overhead camera connects to an edge device like a Raspberry Pi 5 or Jetson Nano. We run a lightweight computer vision model—specifically object detection like YOLO—to track passengers crossing the door threshold. All processing happens locally on the edge. This means it's fast, works without internet for the LED logic, and preserves privacy since no video is sent to the cloud. The AI simply outputs a passenger count, updates the Green or Red LED strip outside, and pushes a lightweight data payload to our cloud via a GPS module."*
 
 ---
 
-**[Perejan — Feature 3]**
-**Visual:** Route suggestion screen showing route (e.g., "04L Colon–SM") highlighted.
+### 5B — User / Mobile App (0:35)
 
-> *"**Intelligent PUV & Route Suggestion.** LoadSense recognizes both formal LTFRB routes and informal PUV lines. It recommends the fastest available ride to your destination."*
+**[Perejan]**
+**Visual 1:** App screen showing live map with color-coded jeepneys (🟢🟡🔴).
+**Visual 2:** AI chatbot screen. User types: *"Which PUV should I take to reach SM City?"* → Response appears with route name, occupancy, and ETA.
 
----
-
-**[Kent — Feature 4]**
-**Visual:** AI chatbot screen. User types: *"Which PUV should I take to reach SM City?"* → Response appears with route name, occupancy, and ETA.
-
-> *"**AI Chatbot Assistant.** Just ask in plain language. LoadSense's AI reads live fleet data and tells you exactly which PUV to board, how full it is, and when it arrives — no app-navigation skills required."*
+> *"For the commuter, all this AI translates to a seamless app experience. Open LoadSense and instantly see every PUV on your route—color-coded Green, Yellow, or Red. Plus, we've integrated an **AI Chatbot Assistant**. Just ask in plain text, 'How do I get to SM City?' and the AI reads the live fleet data to tell you exactly which PUV to board, its current capacity, and ETA."*
 
 ---
 
-### 5B — Operator Dashboard (0:50)
+### 5C — Operator Dashboard (0:35)
 
+**[Kent]**
+**Visual:** Operator Dashboard screen showing a demand forecasting chart and an overloading alert panel.
 
-**[Perejan — Feature 5]**
-**Visual:** Demand forecasting chart — bar graph showing predicted peak demand by hour and route.
-
-> *"**Demand Forecasting.** LoadSense predicts where and when passenger demand will spike, so operators can pre-position vehicles before the rush — not react after it."*
-
----
-
-**[Kent — Feature 6]**
-**Visual:** Alert panel showing overloading flag → operator reviews → verified alert pushes to commuter app.
-
-> *"**Operator Controls & Alert Verification.** When an overloading event or route deviation is detected, the operator sees it first, reviews it, and decides whether to escalate — keeping operators in control and preventing false alarms from reaching commuters."*
+> *"For the operators, the data is transformed into predictive analytics. LoadSense uses historical data to forecast passenger demand, allowing operators to pre-position vehicles before the rush hour hits. Furthermore, if the Edge AI detects illegal overloading, an automated alert is flagged on the operator's dashboard for immediate review and action."*
 
 ---
 
-## 🎬 SECTION 6 — Business Model (0:40)
+## 🎬 SECTION 6 — Business Model & Costing (0:45)
 
-**Visuals:** Animated B2G2B flow diagram.
+**Visuals:** Animated Cost Breakdown & Pricing table showing three tiers (Co-op, LGU, Enterprise API). B2G2B flow diagram.
 
-```
-[LoadSense] ──► [Government / LTFRB] ──► [PUV Operators / Cooperatives]
-                        ↑                          |
-                  Compliance Data           Revenue Sharing
-                  Smart City Grant          on Demand Insights
-```
-
-**Voice-over:**
-> *"LoadSense operates on a **B2G2B model** — Business to Government to Business. We partner with LGUs and LTFRB as a smart-city compliance tool, which gives us institutional reach to onboard PUV cooperatives at scale. Operators receive fleet management value; government receives enforcement data; and LoadSense generates revenue through SaaS subscriptions for operator dashboards and anonymized aggregated demand data licensing — a market that covers every ASEAN city still running informal transit."*
-
-**Scale note (stat card):**
-> *Cebu alone: ~8,000 registered PUVs. Metro Manila: ~70,000+. ASEAN informal transit: hundreds of millions of daily riders.*
+**Voice-over (Perejan):**
+> *"Our hardware is a one-time, retrofit-ready cost of roughly **₱11,000 per vehicle** (under $200). But LoadSense scales as a software company. We have three recurring revenue streams:*
+> 
+> *First, we charge PUV cooperatives a **₱500 monthly SaaS fee per vehicle** for fleet tracking and predictive demand analytics.*
+> 
+> *Second, we offer LGUs a **Smart City Compliance Dashboard for ₱50,000 a month**, giving the government instant visibility on city-wide traffic flow and illegal overloading.*
+> 
+> *Finally, we monetize our raw data. We provide an **Enterprise API** for third-party apps—like Sakay.ph, Google Maps, or real estate platforms—at **₱10,000 per month**, allowing them to integrate live jeepney availability into their own services. Hardware gets us on the road, but data is our true business."*
 
 ---
 
@@ -150,14 +126,13 @@
 
 **Voice-over (both, alternating lines):**
 
-> **Perejan:** *"The LTFRB's PUV Modernization Program is already mandating that traditional jeepneys be replaced or upgraded. Operators are looking for technology that helps them comply — and survive."*
+> **Perejan:** *"The LTFRB's PUV Modernization Program is mandating that jeepneys be upgraded. Operators are desperately looking for affordable technology that helps them comply and survive."*
 
-> **Kent:** *"LoadSense is built for this moment. We are retrofit-ready, hardware-agnostic, and designed to work on the PUVs and the routes that already exist — not a future fleet that hasn't arrived yet."*
+> **Kent:** *"LoadSense is built for this moment. We are retrofit-ready, hardware-agnostic, and driven by accessible Edge AI. We work on the PUVs that are on the road right now."*
 
 > **Perejan:** *"Real information. Safer rides. Smarter cities."*
 
-> **Kent:** *"This is LoadSense."*
-
+> **Kent:** *"This is LoadSense. Thank you."*
 
 ---
 
