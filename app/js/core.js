@@ -286,7 +286,7 @@ const api = `${location.origin}/api`;
           <button class="button clear" type="button" data-modal-close>&times;</button>
         </div>
         <div class="modal-body">${bodyHtml}</div>
-        ${actions.length ? `<div class="route-form-actions">${actions.map(action => `<button class="button ${escapeHtml(action.className || "secondary")}" type="button" data-modal-action="${escapeHtml(action.id)}">${escapeHtml(action.label)}</button>`).join("")}</div>` : ""}
+        ${actions.length ? `<div class="modal-actions">${actions.map(action => `<button class="button ${escapeHtml(action.className || "secondary")}" type="button" data-modal-action="${escapeHtml(action.id)}">${escapeHtml(action.label)}</button>`).join("")}</div>` : ""}
       </div>
     `;
     const close = () => overlay.remove();

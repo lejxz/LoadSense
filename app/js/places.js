@@ -179,7 +179,7 @@
     const isUsingLoc = state.usingCurrentLocation;
     const el = qs('originInput');
     if (!el) return;
-    el.placeholder = isUsingLoc ? '📍 Current location' : 'Search place';
+    el.placeholder = isUsingLoc ? '📍 Using your location' : 'Origin';
   }
 
   const placeSearchSeq = {};

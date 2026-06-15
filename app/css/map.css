@@ -267,7 +267,7 @@
 .map-controls-bar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
   background: transparent;
   box-shadow: none;
   border: none;
@@ -463,6 +463,73 @@
   visibility: hidden;
   pointer-events: auto;
   transition: opacity 0.3s ease;
+}
+
+.layer-toggle-btn {
+  pointer-events: auto;
+  margin-top: 10px;
+}
+
+/* Center Pin Selection Overlay */
+.center-pin-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1000;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -14px; /* Offset to make the point exactly center */
+}
+.center-pin-overlay.hidden {
+  display: none;
+}
+.center-pin-marker {
+  transition: transform 0.2s ease-out;
+  transform: translateY(0);
+}
+.center-pin-marker svg {
+  width: 28px !important;
+  height: 28px !important;
+}
+.center-pin-overlay.is-dragging .center-pin-marker {
+  transform: translateY(-10px);
+}
+.center-pin-shadow {
+  width: 12px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 50%;
+  margin-top: -2px;
+  transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+}
+.center-pin-overlay.is-dragging .center-pin-shadow {
+  transform: scale(0.6);
+  opacity: 0.5;
+}
+
+/* Pin Confirm Bar */
+.pin-confirm-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  padding: 16px;
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
+  z-index: 1001;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.pin-confirm-bar.hidden {
+  transform: translateY(110%);
+}
+
+.pin-dest-btn {
+  margin-bottom: 5px !important;
 }
 
 .map-settings-backdrop.open {

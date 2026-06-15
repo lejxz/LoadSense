@@ -331,7 +331,7 @@ def get_places(q: Optional[str] = None, limit: int = 12, remote: bool = True, co
     routes = list_routes()
     if country:
         routes = [item for item in routes if item.get("country") == country]
-    return {"places": search_places(routes, q or "", limit=limit, include_remote=remote)}
+    return {"places": search_places(routes, q or "", limit=limit, include_remote=remote, country=country)}
 
 
 @router.post("/suggestions")

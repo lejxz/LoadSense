@@ -159,7 +159,7 @@ function findNearestRoute(lat, lon) {
     });
   }
 
-  const routeTypeOptions = ["BRT", "Bus", "City Bus", "Ferry", "FX", "Jeepney", "Minibus", "Other", "Shuttle", "Train", "Tricycle", "UV Express"];
+  const routeTypeOptions = ["BRT", "Bus", "City Bus", "Ferry", "FX", "Jeepney", "Minibus", "Shuttle", "Train", "UV Express", "Other"];
   const routePointTypes = [
     { value: "alight_or_board_stop", label: "Alight or Board Stop" },
     { value: "end_of_route", label: "End of Route" },

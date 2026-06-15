@@ -198,6 +198,7 @@ def search_places(
     context_latitude: Optional[float] = None,
     context_longitude: Optional[float] = None,
     context_text: str = "",
+    country: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     needle = normalize_text(query or "")
     if not needle:
@@ -213,7 +214,14 @@ def search_places(
         context_latitude=context_latitude,
         context_longitude=context_longitude,
         context_text=context_text,
+        country=country,
     ) if include_remote else []
+    if country:
+        target = country.lower()
+        remote_results = [
+            p for p in remote_results 
+            if not p.get("country") or target in str(p.get("country")).lower()
+        ]
     return _attach_place_labels(_dedupe_places(local_results + remote_results))[:limit]
 
 
@@ -267,9 +275,12 @@ def search_remote_places(
     context_latitude: Optional[float] = None,
     context_longitude: Optional[float] = None,
     context_text: str = "",
+    country: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     if limit <= 0:
         return []
+    if country and country.lower() not in query.lower():
+        query = f"{query} {country}"
     return _search_photon_places(query, limit, context_latitude, context_longitude, context_text)
 
 

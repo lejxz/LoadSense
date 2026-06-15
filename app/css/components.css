@@ -559,6 +559,12 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 100%;
+  box-sizing: border-box;
+}
+.searchable-select-wrapper .dropdown-popup {
+    width: max-content;
+    max-width: 100%;
 }
 
 .dropdown-container .dropdown-popup.left-aligned {
@@ -646,6 +652,15 @@ textarea {
 .modal-body {
   padding: 20px;
   overflow-y: auto;
+}
+.modal-actions {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+  background: #fcfdfd;
+  border-radius: 0 0 12px 12px;
 }
 
 .incident-report-form {

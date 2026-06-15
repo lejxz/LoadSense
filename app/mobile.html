@@ -53,7 +53,7 @@
             </div>
             <div class="transit-inputs">
               <div class="input-row">
-                <input id="originInput" autocomplete="off" value="" placeholder="Current location" />
+                <input id="originInput" autocomplete="off" value="" placeholder="Origin" />
               </div>
               <div class="input-divider"></div>
               <div class="input-row">
@@ -105,11 +105,28 @@
           </div>
           <div class="relative">
             <div id="mobileMap" class="live-map"></div>
+            <div id="centerPinOverlay" class="center-pin-overlay hidden">
+              <div class="center-pin-marker">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                  <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+              </div>
+              <div class="center-pin-shadow"></div>
+            </div>
+            
             <div class="map-legend">
               <span><i class="dot green-dot"></i>Seats</span>
               <span><i class="dot yellow-dot"></i>Standing</span>
               <span><i class="dot red-dot"></i>Full</span>
             </div>
+            
+            <!-- Selection Confirmation Bar -->
+            <div id="pinConfirmBar" class="pin-confirm-bar hidden">
+              <button id="confirmPinBtn" class="button primary block">Confirm Destination</button>
+              <button id="cancelPinBtn" class="button secondary block mt-2">Cancel</button>
+            </div>
+            
             <div id="destinationConfirm" class="destination-confirm hidden"></div>
           </div>
         </section>

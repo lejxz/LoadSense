@@ -370,6 +370,23 @@ function drawMap(containerId, routeFilter) {
 
 
 
+      // --- Choose on Map (Pin Destination) Button ---
+      if (containerId === "mobileMap") {
+        const pinBtn = L.DomUtil.create("button", "map-fab pin-dest-btn", wrap);
+        pinBtn.type = "button";
+        pinBtn.title = "Choose destination on map";
+        pinBtn.setAttribute("aria-label", "Choose destination on map");
+        pinBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="transform: scale(0.9)"><path d="M22 2 11 13"></path><path d="m22 2-7 20-4-9-9-4 20-7z"></path></svg>`;
+        
+        L.DomEvent.on(pinBtn, "click", (e) => {
+          e.stopPropagation();
+          if (typeof window.togglePinMode === 'function') {
+            window.togglePinMode(containerId, map);
+          }
+        });
+      }
+
+
       const toggle = L.DomUtil.create("button", "map-fab", wrap);
       toggle.type = "button";
       toggle.title = "Map Settings";
@@ -418,6 +435,21 @@ function drawMap(containerId, routeFilter) {
       return wrap;
     };
     control.addTo(map);
+
+    if (containerId === "mobileMap") {
+       map.on('movestart', () => {
+         if (document.body.classList.contains("pin-selection-mode")) {
+           const overlay = document.getElementById("centerPinOverlay");
+           if (overlay) overlay.classList.add("is-dragging");
+         }
+       });
+       map.on('moveend', () => {
+         if (document.body.classList.contains("pin-selection-mode")) {
+           const overlay = document.getElementById("centerPinOverlay");
+           if (overlay) overlay.classList.remove("is-dragging");
+         }
+       });
+    }
 
     // Start geolocation watch for non-operator maps
     if (!isOperator && navigator.geolocation) {

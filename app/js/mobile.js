@@ -427,6 +427,49 @@
     }
     // setup recenter buttons; map.js owns the location watch to avoid duplicate refresh loops.
     setupRecenterButtons();
+    
+    const confirmPinBtn = qs("confirmPinBtn");
+    const cancelPinBtn = qs("cancelPinBtn");
+    if (confirmPinBtn) {
+      confirmPinBtn.addEventListener("click", () => {
+        const map = state.maps["mobileMap"];
+        if (map) {
+          const center = map.getCenter();
+          const destName = `Pinned Location (${center.lat.toFixed(5)}, ${center.lng.toFixed(5)})`;
+          const destInput = qs("destinationInput");
+          if (destInput) destInput.value = destName;
+          
+          state.selectedDestination = {
+            name: destName,
+            city: "Unknown",
+            latitude: center.lat,
+            longitude: center.lng,
+          };
+          
+          if (typeof window.togglePinMode === 'function') {
+            window.togglePinMode("mobileMap", map);
+          }
+          
+          if (typeof requestTripSuggestions === 'function') {
+            requestTripSuggestions(destName);
+          } else {
+            if (typeof renderDestinationConfirm === 'function') renderDestinationConfirm();
+            if (typeof renderMobile === 'function') renderMobile();
+          }
+          
+          if (typeof showToast === "function") showToast("Destination selected on map.");
+        }
+      });
+    }
+    if (cancelPinBtn) {
+      cancelPinBtn.addEventListener("click", () => {
+        const map = state.maps["mobileMap"];
+        if (map && typeof window.togglePinMode === 'function') {
+          window.togglePinMode("mobileMap", map);
+        }
+      });
+    }
+
     const chatForm = qs("chatForm");
     if (chatForm) {
       chatForm.addEventListener("submit", async event => {
@@ -455,4 +498,27 @@
       }
     }, 30000);
   }
+
+  window.togglePinMode = function(containerId, map) {
+    const isPinMode = document.body.classList.toggle("pin-selection-mode");
+    const overlay = document.getElementById("centerPinOverlay");
+    const confirmBar = document.getElementById("pinConfirmBar");
+    
+    if (isPinMode) {
+      if (overlay) overlay.classList.remove("hidden");
+      if (confirmBar) confirmBar.classList.remove("hidden");
+      // Hide live vehicles from map temporarily
+      const layerGroup = state.mapLayers[containerId];
+      const clusterGroup = state.mapClusters[containerId];
+      if (layerGroup) map.removeLayer(layerGroup);
+      if (clusterGroup) map.removeLayer(clusterGroup);
+    } else {
+      if (overlay) overlay.classList.add("hidden");
+      if (confirmBar) confirmBar.classList.add("hidden");
+      const layerGroup = state.mapLayers[containerId];
+      const clusterGroup = state.mapClusters[containerId];
+      if (layerGroup) layerGroup.addTo(map);
+      if (clusterGroup) clusterGroup.addTo(map);
+    }
+  };
 
