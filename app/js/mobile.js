@@ -349,6 +349,11 @@
     `);
     transcript.scrollTop = transcript.scrollHeight;
 
+    if (!state.chatHistory) {
+      state.chatHistory = [];
+    }
+    state.chatHistory.push({ role: "user", text: query });
+
     const result = await getJson("/chatbot", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -357,6 +362,10 @@
 
     const indicator = document.getElementById(indicatorId);
     if (indicator) indicator.remove();
+
+    if (result && result.answer) {
+        state.chatHistory.push({ role: "model", text: result.answer });
+    }
 
     syncChatResult(result);
     transcript.insertAdjacentHTML("beforeend", renderBotMessage(result));

@@ -65,6 +65,7 @@ class ChatQuery(BaseModel):
     destination: Optional[str] = None
     destination_latitude: Optional[float] = None
     destination_longitude: Optional[float] = None
+    history: Optional[list[dict]] = None
 
 
 class SuggestionQuery(BaseModel):
@@ -585,6 +586,7 @@ def chatbot(query: ChatQuery):
         destination=query.destination or "",
         destination_latitude=query.destination_latitude,
         destination_longitude=query.destination_longitude,
+        history=query.history,
     )
 
 

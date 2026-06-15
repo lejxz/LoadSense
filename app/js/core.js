@@ -23,6 +23,7 @@ const api = `${location.origin}/api`;
     regionFilter: "all",
     places: [],
     tripSuggestions: [],
+    chatHistory: [],
     tripMatches: [],
     tripMessage: "",
     tripNoRouteFound: false,

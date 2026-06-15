@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from datetime import UTC, datetime
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -15,6 +14,7 @@ from backend.app.core.transit import find_transit_suggestions
 from backend.app.db import sqlite_store
 from backend.app.db.models import OperatorAlert, VehicleState
 from backend.app.core.chatbot import get_llm_recommendation
+from backend.app.core.no_API_chatbot import get_no_api_recommendation
 
 
 def parse_timestamp(value: str) -> datetime:
@@ -155,6 +155,7 @@ class FleetStore:
         destination: str = "",
         destination_latitude: Optional[float] = None,
         destination_longitude: Optional[float] = None,
+        history: Optional[list[dict]] = None,
     ) -> Dict[str, Any]:
         # Try optional LLM integration
         llm_response = get_llm_recommendation(
@@ -168,55 +169,18 @@ class FleetStore:
             destination=destination,
             destination_latitude=destination_latitude,
             destination_longitude=destination_longitude,
+            history=history,
         )
         if llm_response is not None:
+            print("Chatbot: Using Gemini API for response.")
             return llm_response
 
-        if self._is_greeting_or_smalltalk(query):
-            answer = "Hello. Tell me your current location and destination, and I can recommend the best route and PUV."
-            sqlite_store.save_chat_query("chat", query, answer, datetime.now(UTC).isoformat())
-            return {
-                "route": route,
-                "answer": answer,
-                "context": [],
-                "matches": [],
-                "language": "en",
-                "intent": "smalltalk",
-            }
-
-        explicit_route = self._route_from_query(query)
-        context_route = explicit_route or (route if self._uses_route_context(query) else "")
-        if self._is_route_info_query(query):
-            answer, context = self._route_info_answer(context_route, country=country)
-            sqlite_store.save_chat_query(context_route or "all", query, answer, datetime.now(UTC).isoformat())
-            return {"route": context_route or "", "answer": answer, "context": context, "matches": [], "language": "en", "intent": "route_info"}
-
-        if self._is_avoid_query(query):
-            answer, context = self._avoidance_answer(context_route, country=country)
-            saved_route = context_route or "all"
-            sqlite_store.save_chat_query(saved_route, query, answer, datetime.now(UTC).isoformat())
-            return {
-                "route": saved_route,
-                "answer": answer,
-                "context": context,
-                "matches": [],
-                "language": "en",
-                "intent": "avoid",
-            }
-
-        if self._is_least_crowded_query(query):
-            answer, context = self._least_crowded_answer(context_route, country=country)
-            sqlite_store.save_chat_query(context_route or "all", query, answer, datetime.now(UTC).isoformat())
-            return {"route": context_route or "all", "answer": answer, "context": context, "matches": [], "language": "en", "intent": "least_crowded"}
-
-        if self._is_boarding_followup(query) and context_route:
-            answer, context = self._best_boarding_answer(context_route, country=country)
-            sqlite_store.save_chat_query(context_route, query, answer, datetime.now(UTC).isoformat())
-            return {"route": context_route, "answer": answer, "context": context, "matches": [], "language": "en", "intent": "boarding"}
-
-        suggestion_result = self.route_suggestions(
-            query=query,
+        print("Chatbot: Using hardcoded heuristics for response (API disabled or unavailable).")
+        # Fallback to hardcoded heuristic implementation
+        return get_no_api_recommendation(
+            fleet_store=self,
             route=route,
+            query=query,
             country=country,
             origin_text=origin_text,
             origin_latitude=origin_latitude,
@@ -225,63 +189,6 @@ class FleetStore:
             destination_latitude=destination_latitude,
             destination_longitude=destination_longitude,
         )
-        if suggestion_result["destination"] or suggestion_result["suggestions"]:
-            answer = suggestion_result["answer"]
-            sqlite_store.save_chat_query(route, query, answer, datetime.now(UTC).isoformat())
-            return {
-                "route": route,
-                "answer": answer,
-                "context": suggestion_result["suggestions"],
-                "origin": suggestion_result["origin"],
-                "destination": suggestion_result["destination"],
-                "matches": suggestion_result["matches"],
-                "language": suggestion_result["language"],
-                "intent": "trip_recommendation",
-            }
-
-        if not route:
-            answer = suggestion_result["answer"]
-            sqlite_store.save_chat_query("all", query, answer, datetime.now(UTC).isoformat())
-            return {
-                "route": "",
-                "answer": answer,
-                "context": [],
-                "origin": suggestion_result["origin"],
-                "destination": suggestion_result["destination"],
-                "matches": [],
-                "language": suggestion_result["language"],
-            }
-
-        route_vehicles = [
-            vehicle for vehicle in self.fleet()
-            if vehicle.route == route and (not country or self._vehicle_country(vehicle) == country)
-        ]
-        if not route_vehicles:
-            return {
-                "route": route,
-                "answer": f"Ride Route {route}. No live vehicles are reporting for Route {route} yet, so wait for the next telemetry update before choosing a specific PUV.",
-                "context": [],
-            }
-
-        ranked = sorted(route_vehicles, key=lambda vehicle: (self._tier_penalty(vehicle.tier), vehicle.eta_minutes))
-        best = ranked[0]
-        action = "board" if best.tier in {"green", "yellow"} else "wait"
-        answer = (
-            f"For Route {route}, {action} Vehicle {best.vehicle_id}. "
-            f"It is {best.tier.replace('_', ' ')} with {best.occupancy}/{best.capacity} passengers "
-            f"and an ETA of {best.eta_minutes:.1f} minutes."
-        )
-        if best.route_deviation["anomaly"]:
-            answer += " Operator verification is needed because the vehicle is off-route."
-        if "least" in query.lower() or "crowd" in query.lower():
-            answer += " This is currently the least crowded option in the live fleet."
-
-        sqlite_store.save_chat_query(route, query, answer, datetime.now(UTC).isoformat())
-        return {
-            "route": route,
-            "answer": answer,
-            "context": [model_to_dict(vehicle) for vehicle in ranked],
-        }
 
     def summary(self) -> Dict[str, Any]:
         vehicles = self.fleet()
@@ -374,176 +281,12 @@ class FleetStore:
             return "gps_dropout"
         return "ok"
 
-    @staticmethod
-    def _tier_penalty(tier: str) -> int:
-        return {
-            "green": 0,
-            "yellow": 1,
-            "red": 2,
-            "blinking_red": 3,
-        }[tier]
-
-    @staticmethod
-    def _is_avoid_query(query: str) -> bool:
-        text = query.lower()
-        return any(word in text for word in ["avoid", "overloaded", "do not ride", "don't ride"])
-
-    @staticmethod
-    def _is_least_crowded_query(query: str) -> bool:
-        text = query.lower()
-        return "least crowded" in text or "less crowded" in text or "most seats" in text or "available seats" in text
-
-    @staticmethod
-    def _is_boarding_followup(query: str) -> bool:
-        text = query.lower().strip(" ?.!")
-        return text in {"which do i ride", "which should i ride", "what do i ride", "which jeepney do i ride", "which jeepney should i ride", "which puv do i ride"}
-
-    @staticmethod
-    def _is_route_info_query(query: str) -> bool:
-        text = query.lower()
-        return any(phrase in text for phrase in ["explain this route", "explain that route", "what is this route", "what is that route", "route details"])
-
-    @staticmethod
-    def _uses_route_context(query: str) -> bool:
-        text = query.lower()
-        return any(phrase in text for phrase in ["that route", "this route", "current route", "selected route", "in that route", "in this route"]) or FleetStore._is_boarding_followup(query)
-
-    @staticmethod
-    def _is_greeting_or_smalltalk(query: str) -> bool:
-        text = query.strip().lower()
-        normalized = "".join(ch for ch in text if ch.isalnum() or ch.isspace()).strip()
-        greetings = {"hi", "hello", "hello?", "hey", "good morning", "good afternoon", "good evening", "thanks", "thank you"}
-        return text in greetings or normalized in greetings
-
-    def _route_from_query(self, query: str) -> str:
-        text = query.lower()
-        for route in list_routes():
-            route_id = str(route.get("route", ""))
-            if route_id and re.search(rf"(?<![a-z0-9]){re.escape(route_id.lower())}(?![a-z0-9])", text):
-                return route_id
-        return ""
-
     def _vehicle_country(self, vehicle: VehicleState) -> str:
         route_countries = {item.get("route"): item.get("country") for item in list_routes()}
         if route_countries.get(vehicle.route):
             return str(route_countries[vehicle.route])
         static_vehicle = next((item for item in sqlite_store.list_vehicles() if item.get("vehicle_id") == vehicle.vehicle_id), None)
         return str((static_vehicle or {}).get("country") or "")
-
-    def _avoidance_answer(self, route: str = "", country: str | None = None) -> tuple[str, List[Dict[str, Any]]]:
-        route_vehicles = [
-            vehicle for vehicle in self.fleet()
-            if (not route or vehicle.route == route)
-            and (not country or self._vehicle_country(vehicle) == country)
-        ]
-        context = [model_to_dict(vehicle) for vehicle in route_vehicles]
-        route_label = f"Route {route}" if route else "the live fleet"
-        if not route_vehicles:
-            return f"No live PUVs are reporting for {route_label} right now, so I cannot identify a vehicle to avoid yet.", context
-
-        risky = [
-            vehicle for vehicle in route_vehicles
-            if vehicle.tier in {"red", "blinking_red"}
-            or vehicle.route_deviation.get("anomaly")
-            or vehicle.signal_quality != "ok"
-        ]
-        risky = sorted(risky, key=lambda vehicle: (self._tier_penalty(vehicle.tier), -vehicle.occupancy), reverse=True)
-        better = sorted(
-            [vehicle for vehicle in route_vehicles if vehicle not in risky],
-            key=lambda vehicle: (self._tier_penalty(vehicle.tier), vehicle.eta_minutes),
-        )
-        if risky:
-            avoid_list = ", ".join(
-                f"{vehicle.vehicle_id} on Route {vehicle.route} ({vehicle.occupancy}/{vehicle.capacity}, {self._avoid_reason(vehicle)})"
-                for vehicle in risky[:3]
-            )
-            if better:
-                best = better[0]
-                return (
-                    f"For {route_label}, avoid {avoid_list}. Better option: {best.vehicle_id} on Route {best.route} "
-                    f"has {best.occupancy}/{best.capacity} riders, {best.tier.replace('_', ' ')}, "
-                    f"and ETA {best.eta_minutes:.1f} min.",
-                    [model_to_dict(best), *[model_to_dict(vehicle) for vehicle in risky]],
-                )
-            return f"For {route_label}, avoid {avoid_list}. All reporting PUVs in this set look crowded or need verification.", context
-
-        best = better[0]
-        return (
-            f"For {route_label}, no reporting PUV needs to be avoided right now. Best current option: "
-            f"{best.vehicle_id} on Route {best.route} with {best.occupancy}/{best.capacity} riders, {best.tier.replace('_', ' ')}, "
-            f"ETA {best.eta_minutes:.1f} min.",
-            context,
-        )
-
-    def _least_crowded_answer(self, route: str = "", country: str | None = None) -> tuple[str, List[Dict[str, Any]]]:
-        vehicles = [
-            vehicle for vehicle in self.fleet()
-            if (not route or vehicle.route == route)
-            and (not country or self._vehicle_country(vehicle) == country)
-            and vehicle.status != "idle"
-        ]
-        context = [model_to_dict(vehicle) for vehicle in vehicles]
-        route_label = f"Route {route}" if route else "the live fleet"
-        if not vehicles:
-            return f"No live PUVs are reporting for {route_label} right now.", context
-        ranked = sorted(vehicles, key=lambda vehicle: (vehicle.occupancy / max(1, vehicle.capacity), self._tier_penalty(vehicle.tier), vehicle.eta_minutes))
-        best = ranked[0]
-        seats = max(0, best.capacity - best.occupancy)
-        return (
-            f"Least crowded option for {route_label}: {best.vehicle_id} on Route {best.route}. "
-            f"It has {best.occupancy}/{best.capacity} riders ({seats} seats available), {best.tier.replace('_', ' ')}, "
-            f"ETA {best.eta_minutes:.1f} min.",
-            [model_to_dict(vehicle) for vehicle in ranked],
-        )
-
-    def _best_boarding_answer(self, route: str, country: str | None = None) -> tuple[str, List[Dict[str, Any]]]:
-        vehicles = [
-            vehicle for vehicle in self.fleet()
-            if vehicle.route == route
-            and (not country or self._vehicle_country(vehicle) == country)
-            and vehicle.status != "idle"
-        ]
-        context = [model_to_dict(vehicle) for vehicle in vehicles]
-        if not vehicles:
-            return f"Ride Route {route}. No live PUVs are reporting for Route {route} right now, so wait for the next telemetry update before choosing a specific PUV.", context
-        ranked = sorted(vehicles, key=lambda vehicle: (self._tier_penalty(vehicle.tier), vehicle.eta_minutes, vehicle.occupancy))
-        best = ranked[0]
-        return (
-            f"Ride {best.vehicle_id} on Route {route}. It has {best.occupancy}/{best.capacity} riders, "
-            f"{best.tier.replace('_', ' ')}, and ETA {best.eta_minutes:.1f} min.",
-            [model_to_dict(vehicle) for vehicle in ranked],
-        )
-
-    def _route_info_answer(self, route: str, country: str | None = None) -> tuple[str, List[Dict[str, Any]]]:
-        if not route:
-            return "Which route do you want me to explain? Ask after a recommendation or include the route code.", []
-        route_info = next((item for item in list_routes() if item.get("route") == route and (not country or item.get("country") == country)), None)
-        vehicles = [
-            vehicle for vehicle in self.fleet()
-            if vehicle.route == route and (not country or self._vehicle_country(vehicle) == country)
-        ]
-        context = [model_to_dict(vehicle) for vehicle in vehicles]
-        if not route_info:
-            return f"I do not have route details for Route {route} yet.", context
-        endpoints = route_info.get("endpoints") or []
-        landmarks = route_info.get("landmarks") or []
-        live = f"{len(vehicles)} live PUVs" if vehicles else "no live PUVs reporting"
-        return (
-            f"Route {route}: {route_info.get('name', route)}. "
-            f"Area: {route_info.get('city') or route_info.get('zone') or 'unknown'}. "
-            f"Endpoints: {', '.join(endpoints[:2]) if endpoints else 'not listed'}. "
-            f"Key stops: {', '.join(landmarks[:5]) if landmarks else 'not listed'}. "
-            f"Current status: {live}.",
-            context,
-        )
-
-    @staticmethod
-    def _avoid_reason(vehicle: VehicleState) -> str:
-        if vehicle.route_deviation.get("anomaly"):
-            return "off route"
-        if vehicle.signal_quality != "ok":
-            return vehicle.signal_quality.replace("_", " ")
-        return vehicle.tier.replace("_", " ")
 
 
 fleet_store = FleetStore()

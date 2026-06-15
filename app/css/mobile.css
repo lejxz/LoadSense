@@ -1150,12 +1150,21 @@ summary.route-card-head {
   border-radius: 50% !important;
   background: var(--wash);
   border: 1px solid var(--line) !important;
-  color: var(--teal);
+  flex-shrink: 0; /* Prevents button from shrinking */
 }
-.zoom-btn:hover {
-  background: var(--line);
+
+
+/* Chat embedded cards */
+.chat-cards {
+  margin-top: 12px;
 }
-.zoom-btn svg {
-  width: 16px;
-  height: 16px;
+.chat-cards .suggestion-card {
+  background: var(--wash, #f9fafb);
+  border: 1px solid rgba(0,0,0,0.05);
+  padding: 12px;
+  box-shadow: none;
+  border-radius: 10px;
+}
+.chat-cards .vehicle-card-content h4 {
+  font-size: 14px;
 }

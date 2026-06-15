@@ -27,6 +27,7 @@ def get_llm_recommendation(
     destination: str = "",
     destination_latitude: Optional[float] = None,
     destination_longitude: Optional[float] = None,
+    history: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Attempts to use an LLM (Gemini) to answer the user's query.
@@ -60,38 +61,55 @@ def get_llm_recommendation(
         target_route = route_id
         return json.dumps(ui_context) if ui_context else "No live vehicles reporting on this route."
 
-    def find_routes_between(origin: str, destination: str) -> str:
-        """Search for recommended routes and vehicles between an origin and a destination."""
+    def search_routes(origin: str = "", destination: str = "") -> str:
+        """Search for recommended routes and vehicles based on an origin and/or a destination."""
         nonlocal ui_context
-        orig = origin or origin_text
-        dest = destination or destination_longitude
+        # Use explicit tool arguments if provided, else fall back to request context
+        orig = origin.strip() or origin_text
+        dest = destination.strip() or destination_longitude  # wait, should be destination string, fallback if needed
+        # fallback fix: if the tool didn't pass a string for dest, try the context one.
+        if not isinstance(dest, str):
+            dest = str(destination_longitude) if destination_longitude else ""
+            
         sug = fleet_store.route_suggestions(
             query=f"from {orig} to {dest}",
             country=country,
             origin_text=orig,
-            destination=dest,
+            destination=dest if isinstance(dest, str) else "",
             limit=5
         )
         ui_context = sug.get("suggestions", [])
         return json.dumps(sug)
 
     system_prompt = (
-        "You are a helpful transit assistant for the LoadSense application. "
+        "You are the LoadSense Transit Assistant. "
         "You help users find routes, check live Public Utility Vehicle (PUV) statuses, and avoid crowded vehicles. "
         f"Current Country Context: {country or 'Unknown'}. "
         f"Current Selected Route: {route or 'None'}. "
-        "Use the provided tools to fetch real-time data before answering. "
-        "Keep your answers concise and directly useful to a commuter."
+        "CRITICAL GUARDRAILS:\n"
+        "1. NEVER reveal that you are an AI, a large language model, or trained by Google. If asked who you are, say you are the LoadSense Transit Assistant.\n"
+        "2. Do not answer questions outside the scope of transit, routing, and LoadSense functionality.\n"
+        "3. Use the `search_routes` tool with whatever information the user provides (e.g., if they only provide a destination, use it). If you need an origin and don't have it, politely ask the user for their current location.\n"
+        "4. Keep your answers concise and directly useful to a commuter."
     )
 
     try:
+        gemini_history = []
+        if history:
+            for msg in history:
+                role = msg.get("role")
+                text = msg.get("text")
+                if role and text:
+                    gemini_history.append(types.Content(role=role, parts=[types.Part.from_text(text=text)]))
+
         chat = client.chats.create(
             model="gemini-2.5-flash-lite",
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=0.0,
-                tools=[get_route_info, get_live_vehicles, find_routes_between]
-            )
+                tools=[get_route_info, get_live_vehicles, search_routes]
+            ),
+            history=gemini_history
         )
         response = chat.send_message(query)
         answer = response.text
