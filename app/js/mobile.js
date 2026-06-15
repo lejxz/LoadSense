@@ -36,10 +36,15 @@
 
   function bindVehicleButtons(scope = document) {
     scope.querySelectorAll("[data-zoom-vehicle]").forEach(button => {
-      button.addEventListener("click", () => zoomVehicle(button.dataset.zoomVehicle));
+      button.addEventListener("click", () => {
+        zoomVehicle(button.dataset.zoomVehicle);
+        state.showTripPanel = false;
+        renderMobile();
+      });
     });
     scope.querySelectorAll("[data-select-route]").forEach(button => {
       button.addEventListener("click", () => {
+        state.selectedVehicleId = null;
         state.selectedRoute = button.dataset.selectRoute;
         state.tripSuggestions = [];
         activateMobileTab("mapTab");
@@ -72,7 +77,7 @@
     }
     setTimeout(() => {
       try { state.maps.mobileMap?.invalidateSize(); } catch (e) {}
-      if (state.selectedRoute) fitRoute("mobileMap", state.selectedRoute);
+      if (state.selectedRoute && !state.selectedVehicleId) fitRoute("mobileMap", state.selectedRoute);
     }, 120);
   }
 
@@ -242,6 +247,7 @@
       if (clearBtn) {
         clearBtn.addEventListener("click", () => {
           state.selectedDestination = null;
+          state.selectedVehicleId = null;
           state.tripSuggestions = [];
           state.showTripPanel = false;
           const destInput = qs("destinationInput");
@@ -286,6 +292,10 @@
               <div><span style="color: var(--muted); display: block; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-bottom: 2px;">Distance</span><strong style="font-size: 14px; color: #1e293b; display: block;">${dist} km</strong></div>
               <div style="grid-column: span 2;"><span style="color: var(--muted); display: block; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-bottom: 2px;">Est. Fare</span><strong style="font-size: 14px; color: #1e293b; display: block;">PHP ${fare}</strong></div>
             </div>
+            <button data-zoom-vehicle="${escapeHtml(best.vehicle_id)}" type="button" style="width: 100%; margin-top: 12px; padding: 12px; background: var(--teal); color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line></svg>
+              Zoom to PUV
+            </button>
           </div>
         `;
         
@@ -320,6 +330,7 @@
       state.showTripPanel = false;
       renderMobile();
     });
+    bindVehicleButtons(panel);
   }
 
   async function askMobileChat(query) {

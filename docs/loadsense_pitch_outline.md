@@ -85,21 +85,21 @@
 
 ### 5A — User / Mobile App (1:00)
 
-**[Kent — Feature 1]**
+**[Kent — Feature 2]**
 **Visual:** App screen showing live map with color-coded jeepneys (🟢🟡🔴🔴).
 
 > *"**Live Occupancy & GPS Monitoring.** Open LoadSense and instantly see every PUV on your route — color-coded Green, Yellow, or Red — so you know whether to board or wait before the jeepney even reaches you."*
 
 ---
 
-**[Perejan — Feature 2]**
+**[Perejan — Feature 3]**
 **Visual:** Route suggestion screen showing route (e.g., "04L Colon–SM") highlighted.
 
 > *"**Intelligent PUV & Route Suggestion.** LoadSense recognizes both formal LTFRB routes and informal PUV lines. It recommends the fastest available ride to your destination."*
 
 ---
 
-**[Kent — Feature 3]**
+**[Kent — Feature 4]**
 **Visual:** AI chatbot screen. User types: *"Which PUV should I take to reach SM City?"* → Response appears with route name, occupancy, and ETA.
 
 > *"**AI Chatbot Assistant.** Just ask in plain language. LoadSense's AI reads live fleet data and tells you exactly which PUV to board, how full it is, and when it arrives — no app-navigation skills required."*
@@ -108,21 +108,15 @@
 
 ### 5B — Operator Dashboard (0:50)
 
-**[Perejan — Feature 4]**
-**Visual:** Operator dashboard — fleet map view with.
 
-> *"**Fleet Monitoring & Management.** Operators see their entire fleet in real time — GPS positions, occupancy tiers, and route adherence — all from one dashboard. No more guessing where your vehicles are."*
-
----
-
-**[Kent — Feature 5]**
+**[Perejan — Feature 5]**
 **Visual:** Demand forecasting chart — bar graph showing predicted peak demand by hour and route.
 
 > *"**Demand Forecasting.** LoadSense predicts where and when passenger demand will spike, so operators can pre-position vehicles before the rush — not react after it."*
 
 ---
 
-**[Perejan — Feature 6]**
+**[Kent — Feature 6]**
 **Visual:** Alert panel showing overloading flag → operator reviews → verified alert pushes to commuter app.
 
 > *"**Operator Controls & Alert Verification.** When an overloading event or route deviation is detected, the operator sees it first, reviews it, and decides whether to escalate — keeping operators in control and preventing false alarms from reaching commuters."*

@@ -567,14 +567,17 @@ def verify_alert(alert_id: str, action: str, note: str, timestamp: str) -> Optio
 
 
 def save_chat_query(route: str, query: str, answer: str, timestamp: str) -> None:
-    country = country_for_route(route)
-    init_db(country)
-    conn = _get_connection(country)
-    conn.execute(
-        "INSERT INTO chatbot_queries (route, query, answer, timestamp) VALUES (?, ?, ?, ?)",
-        (route, query, answer, timestamp),
-    )
-    conn.commit()
+    try:
+        country = country_for_route(str(route))
+        init_db(country)
+        conn = _get_connection(country)
+        conn.execute(
+            "INSERT INTO chatbot_queries (route, query, answer, timestamp) VALUES (?, ?, ?, ?)",
+            (str(route), str(query), str(answer), str(timestamp)),
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"Warning: Failed to save chat query: {e}")
 
 
 def save_operator_feedback(alert_id: str, vehicle_id: str, route: str, action: str, timestamp: str) -> None:

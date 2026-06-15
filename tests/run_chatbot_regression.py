@@ -62,6 +62,11 @@ def main() -> None:
 
     assert_answer(
         client,
+        {"route": "", "query": "Which PUV should I board to go from Naga to IT Park?", "country": "PH"},
+        ["IT Park", "Recommended route", "PH-MJ01"],
+    )
+    assert_answer(
+        client,
         {"route": "", "query": "What route do I take to reach Basak Cebu?"},
         ["Basak", "Recommended route"],
     )
@@ -145,7 +150,7 @@ def main() -> None:
     )
     assert_place_search(client, "Minglanilla", "Minglanilla", "town")
     assert_place_search(client, "Basak", "Basak Cebu", "barangay")
-    assert_place_search(client, "Lipata", "Lipata", "barangay")
+    assert_place_search(client, "IT Park", "IT Park", "landmark")
     print("chatbot regression ok")
 
 

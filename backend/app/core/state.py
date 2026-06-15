@@ -13,7 +13,6 @@ from backend.app.core.routes import list_routes, nearest_stop_id
 from backend.app.core.transit import find_transit_suggestions
 from backend.app.db import sqlite_store
 from backend.app.db.models import OperatorAlert, VehicleState
-from backend.app.core.chatbot import get_llm_recommendation
 from backend.app.core.no_API_chatbot import get_no_api_recommendation
 
 
@@ -157,26 +156,9 @@ class FleetStore:
         destination_longitude: Optional[float] = None,
         history: Optional[list[dict]] = None,
     ) -> Dict[str, Any]:
-        # Try optional LLM integration
-        llm_response = get_llm_recommendation(
-            fleet_store=self,
-            route=route,
-            query=query,
-            country=country,
-            origin_text=origin_text,
-            origin_latitude=origin_latitude,
-            origin_longitude=origin_longitude,
-            destination=destination,
-            destination_latitude=destination_latitude,
-            destination_longitude=destination_longitude,
-            history=history,
-        )
-        if llm_response is not None:
-            print("Chatbot: Using Gemini API for response.")
-            return llm_response
-
-        print("Chatbot: Using hardcoded heuristics for response (API disabled or unavailable).")
-        # Fallback to hardcoded heuristic implementation
+        # Keep commuter answers grounded in the route database and live fleet.
+        # LLM chat paths are intentionally bypassed here because they can
+        # hallucinate route facts or skip the local matcher.
         return get_no_api_recommendation(
             fleet_store=self,
             route=route,

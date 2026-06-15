@@ -67,7 +67,16 @@ def distance_to_route_meters(latitude: float, longitude: float, route: str) -> f
 def detect_route_deviation(latitude: float, longitude: float, route: str, threshold_meters: float | None = None) -> dict:
     if threshold_meters is None:
         threshold_meters = float(config_value("route_monitoring", "deviation_threshold_meters", default=200.0))
-    deviation_meters = round(distance_to_route_meters(latitude, longitude, route), 2)
+    try:
+        deviation_meters = round(distance_to_route_meters(latitude, longitude, route), 2)
+    except KeyError:
+        return {
+            "route": route,
+            "deviation_meters": None,
+            "threshold_meters": threshold_meters,
+            "anomaly": False,
+            "status": "unknown_route",
+        }
     return {
         "route": route,
         "deviation_meters": deviation_meters,

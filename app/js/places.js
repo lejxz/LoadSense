@@ -4,6 +4,10 @@
     const rName = routeName(routeId);
     let cleaned = normalizedStop.replace(rName, "").replace(routeId, "");
     cleaned = cleaned.replace(/^[\s:\->]+/, "").trim();
+    const lowerCleaned = cleaned.toLowerCase();
+    if (lowerCleaned === "waypoint" || lowerCleaned === "turn" || lowerCleaned === "origin" || lowerCleaned === "end") {
+      return "Intersection";
+    }
     return cleaned || "nearest stop";
   }
 
@@ -20,7 +24,7 @@
               <div class="trip-detail-grid">
                 <div style="color: var(--muted);">Board:</div> <div><strong>${escapeHtml(cleanStopName(suggestion.legs[0].boarding_stop?.name, suggestion.legs[0].route))}</strong></div>
                 <div style="color: var(--muted);">Alight:</div> <div><strong>${escapeHtml(cleanStopName(suggestion.legs[0].alighting_stop?.name, suggestion.legs[0].route))}</strong></div>
-                <div style="color: var(--muted);">Distance:</div> <div>${Number(suggestion.distance_km || 0).toFixed(1)} km</div>
+                <div style="color: var(--muted);">Distance:</div> <div>First leg</div>
                 <div style="color: var(--muted);">ETA to you:</div> <div>~${Math.round(Number(suggestion.eta_minutes || 0))} min</div>
                 <div style="color: var(--muted);">Fare:</div> <div>Included below</div>
               </div>
@@ -361,18 +365,54 @@
   function renderBotMessage(result) {
     const firstVehicle = (result?.context || []).find(item => item.vehicle_id && item.route);
     const routeId = firstVehicle?.route || (result?.route && result.route !== "all" ? result.route : state.chatContext.route);
-    const actions = [];
-    const canZoom = ["boarding", "trip_recommendation", "llm_response"].includes(result?.intent);
-    if (canZoom && firstVehicle?.vehicle_id) {
-      actions.push(`<button class="mini-action" data-chat-zoom="${escapeHtml(firstVehicle.vehicle_id)}" type="button">Zoom PUV</button>`);
-    }
-    if (routeId) {
-      actions.push(`<button class="mini-action" data-chat-route="${escapeHtml(routeId)}" type="button">Show route</button>`);
-    }
-
+    
     let cardsHtml = "";
     if (result?.context && result.context.length > 0 && result.context[0].boarding_stop) {
         cardsHtml = result.context.slice(0, 1).map(sug => renderSuggestionCard(sug)).join("");
+    }
+
+    let innerContent = "";
+
+    if (result?.ui_type === "modal") {
+        const details = result.ui_details || {};
+        const title = details.title || "Information";
+        const dynamicButtons = (details.buttons || []).map(btn => {
+            let actionAttr = "";
+            if (btn.action === "SHOW_ROUTE") actionAttr = `data-chat-route="${escapeHtml(btn.value)}"`;
+            else if (btn.action === "ZOOM_VEHICLE") actionAttr = `data-chat-zoom="${escapeHtml(btn.value)}"`;
+            else if (btn.action === "SUGGEST_ROUTE") actionAttr = `data-chat-suggest="${escapeHtml(btn.value)}"`;
+            return `<button class="mini-action primary-action" style="margin-right: 8px; font-weight: 600;" ${actionAttr} type="button">${escapeHtml(btn.label)}</button>`;
+        }).join("");
+
+        innerContent = `
+            <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden;">
+                <div style="background: var(--teal, #0f172a); color: white; padding: 10px 14px; font-weight: 600; font-size: 14px;">
+                    ${escapeHtml(title)}
+                </div>
+                <div style="padding: 14px; font-size: 14px; color: var(--ink, #1e293b);">
+                    <p style="margin: 0 0 12px 0;">${escapeHtml(result?.answer || "")}</p>
+                    ${cardsHtml ? `<div class="chat-cards" style="margin-bottom: 12px;">${cardsHtml}</div>` : ""}
+                    ${dynamicButtons ? `<div style="border-top: 1px solid #e2e8f0; padding-top: 12px; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 8px;">${dynamicButtons}</div>` : ""}
+                </div>
+            </div>
+        `;
+    } else {
+        const actions = [];
+        const canZoom = ["boarding", "trip_recommendation"].includes(result?.intent) || (result?.intent === "llm_response" && firstVehicle);
+        if (canZoom && firstVehicle?.vehicle_id) {
+          actions.push(`<button class="mini-action" data-chat-zoom="${escapeHtml(firstVehicle.vehicle_id)}" type="button">Zoom PUV</button>`);
+        }
+        
+        const hideRouteButton = ["smalltalk"].includes(result?.intent) || (result?.intent === "llm_response" && result?.ui_type === "message");
+        if (routeId && !hideRouteButton) {
+          actions.push(`<button class="mini-action" data-chat-route="${escapeHtml(routeId)}" type="button">Show route</button>`);
+        }
+
+        innerContent = `
+          <p>${escapeHtml(result?.answer || "I could not answer that yet.")}</p>
+          ${actions.length ? `<div class="chat-actions">${actions.join("")}</div>` : ""}
+          ${cardsHtml ? `<div class="chat-cards">${cardsHtml}</div>` : ""}
+        `;
     }
 
     return `
@@ -380,10 +420,8 @@
         <div class="bot-avatar">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
         </div>
-        <div class="message bot" style="max-width: 90%;">
-          <p>${escapeHtml(result?.answer || "I could not answer that yet.")}</p>
-          ${actions.length ? `<div class="chat-actions">${actions.join("")}</div>` : ""}
-          ${cardsHtml ? `<div class="chat-cards">${cardsHtml}</div>` : ""}
+        <div class="message bot" style="max-width: 90%; ${result?.ui_type === 'modal' ? 'padding: 0; background: transparent; box-shadow: none;' : ''}">
+          ${innerContent}
         </div>
       </div>
     `;
@@ -393,14 +431,21 @@
     scope.querySelectorAll("[data-chat-zoom]").forEach(button => {
       button.addEventListener("click", () => {
         activateMobileTab("mapTab");
-        zoomVehicle(button.dataset.chatZoom);
+        if (typeof zoomVehicle === "function") zoomVehicle(button.dataset.chatZoom);
       });
     });
     scope.querySelectorAll("[data-chat-route]").forEach(button => {
       button.addEventListener("click", () => {
         state.selectedRoute = button.dataset.chatRoute;
         activateMobileTab("mapTab");
-        previewRoute(button.dataset.chatRoute, "mobileMap");
+        if (typeof previewRoute === "function") previewRoute(button.dataset.chatRoute, "mobileMap");
+      });
+    });
+    scope.querySelectorAll("[data-chat-suggest]").forEach(button => {
+      button.addEventListener("click", () => {
+        state.selectedRoute = button.dataset.chatSuggest;
+        activateMobileTab("mapTab");
+        if (typeof previewRoute === "function") previewRoute(state.selectedRoute, "mobileMap");
       });
     });
   }

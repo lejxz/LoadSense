@@ -61,15 +61,50 @@ def _route_from_query(query: str) -> str:
     text = query.lower()
     for route in list_routes():
         route_id = str(route.get("route", ""))
-        if route_id and re.search(rf"(?<![a-z0-9]){re.escape(route_id.lower())}(?![a-z0-9])", text):
-            return route_id
+        for code in _route_codes(route):
+            if code and re.search(rf"(?<![a-z0-9]){re.escape(code.lower())}(?![a-z0-9])", text):
+                return code
     return ""
+
+
+def _route_codes(route: dict[str, Any]) -> list[str]:
+    values = [
+        str(route.get("route") or "").strip(),
+        str(route.get("tag") or "").strip(),
+    ]
+    route_id = values[0]
+    if "-" in route_id:
+        values.append(route_id.split("-", 1)[1])
+    return list(dict.fromkeys(value for value in values if value))
+
+
+def _route_matches(value: str, route: str) -> bool:
+    value_norm = value.strip().lower()
+    route_norm = route.strip().lower()
+    if not value_norm or not route_norm:
+        return False
+    return value_norm == route_norm or value_norm.endswith(f"-{route_norm}") or route_norm.endswith(f"-{value_norm}")
+
+
+def _vehicle_matches_route(vehicle: VehicleState, route: str) -> bool:
+    return _route_matches(vehicle.route, route)
+
+
+def _find_route_info(route: str, country: str | None = None) -> Optional[dict[str, Any]]:
+    return next(
+        (
+            item for item in list_routes()
+            if (not country or item.get("country") == country)
+            and any(_route_matches(code, route) for code in _route_codes(item))
+        ),
+        None,
+    )
 
 
 def _avoidance_answer(fleet_store: Any, route: str = "", country: str | None = None) -> tuple[str, List[Dict[str, Any]]]:
     route_vehicles = [
         vehicle for vehicle in fleet_store.fleet()
-        if (not route or vehicle.route == route)
+        if (not route or _vehicle_matches_route(vehicle, route))
         and (not country or fleet_store._vehicle_country(vehicle) == country)
     ]
     context = [model_to_dict(vehicle) for vehicle in route_vehicles]
@@ -115,7 +150,7 @@ def _avoidance_answer(fleet_store: Any, route: str = "", country: str | None = N
 def _least_crowded_answer(fleet_store: Any, route: str = "", country: str | None = None) -> tuple[str, List[Dict[str, Any]]]:
     vehicles = [
         vehicle for vehicle in fleet_store.fleet()
-        if (not route or vehicle.route == route)
+        if (not route or _vehicle_matches_route(vehicle, route))
         and (not country or fleet_store._vehicle_country(vehicle) == country)
         and vehicle.status != "idle"
     ]
@@ -137,7 +172,7 @@ def _least_crowded_answer(fleet_store: Any, route: str = "", country: str | None
 def _best_boarding_answer(fleet_store: Any, route: str, country: str | None = None) -> tuple[str, List[Dict[str, Any]]]:
     vehicles = [
         vehicle for vehicle in fleet_store.fleet()
-        if vehicle.route == route
+        if _vehicle_matches_route(vehicle, route)
         and (not country or fleet_store._vehicle_country(vehicle) == country)
         and vehicle.status != "idle"
     ]
@@ -156,10 +191,10 @@ def _best_boarding_answer(fleet_store: Any, route: str, country: str | None = No
 def _route_info_answer(fleet_store: Any, route: str, country: str | None = None) -> tuple[str, List[Dict[str, Any]]]:
     if not route:
         return "Which route do you want me to explain? Ask after a recommendation or include the route code.", []
-    route_info = next((item for item in list_routes() if item.get("route") == route and (not country or item.get("country") == country)), None)
+    route_info = _find_route_info(route, country=country)
     vehicles = [
         vehicle for vehicle in fleet_store.fleet()
-        if vehicle.route == route and (not country or fleet_store._vehicle_country(vehicle) == country)
+        if _vehicle_matches_route(vehicle, route) and (not country or fleet_store._vehicle_country(vehicle) == country)
     ]
     context = [model_to_dict(vehicle) for vehicle in vehicles]
     if not route_info:
@@ -199,6 +234,7 @@ def get_no_api_recommendation(
             "matches": [],
             "language": "en",
             "intent": "smalltalk",
+            "ui_type": "message",
         }
 
     explicit_route = _route_from_query(query)
@@ -206,7 +242,19 @@ def get_no_api_recommendation(
     if _is_route_info_query(query):
         answer, context = _route_info_answer(fleet_store, context_route, country=country)
         sqlite_store.save_chat_query(context_route or "all", query, answer, datetime.now(UTC).isoformat())
-        return {"route": context_route or "", "answer": answer, "context": context, "matches": [], "language": "en", "intent": "route_info"}
+        return {
+            "route": context_route or "",
+            "answer": answer,
+            "context": context,
+            "matches": [],
+            "language": "en",
+            "intent": "route_info",
+            "ui_type": "modal",
+            "ui_details": {
+                "title": "Route Information",
+                "buttons": [{"label": "View Route", "action": "SHOW_ROUTE", "value": context_route or ""}]
+            }
+        }
 
     if _is_avoid_query(query):
         answer, context = _avoidance_answer(fleet_store, context_route, country=country)
@@ -219,17 +267,46 @@ def get_no_api_recommendation(
             "matches": [],
             "language": "en",
             "intent": "avoid",
+            "ui_type": "modal",
+            "ui_details": {
+                "title": "Avoid these vehicles",
+                "buttons": [{"label": "Show Alternatives", "action": "SUGGEST_ROUTE", "value": saved_route}]
+            }
         }
 
     if _is_least_crowded_query(query):
         answer, context = _least_crowded_answer(fleet_store, context_route, country=country)
         sqlite_store.save_chat_query(context_route or "all", query, answer, datetime.now(UTC).isoformat())
-        return {"route": context_route or "all", "answer": answer, "context": context, "matches": [], "language": "en", "intent": "least_crowded"}
+        return {
+            "route": context_route or "all",
+            "answer": answer,
+            "context": context,
+            "matches": [],
+            "language": "en",
+            "intent": "least_crowded",
+            "ui_type": "modal",
+            "ui_details": {
+                "title": "Least Crowded Option",
+                "buttons": [{"label": "View Route", "action": "SHOW_ROUTE", "value": context_route or "all"}]
+            }
+        }
 
     if _is_boarding_followup(query) and context_route:
         answer, context = _best_boarding_answer(fleet_store, context_route, country=country)
         sqlite_store.save_chat_query(context_route, query, answer, datetime.now(UTC).isoformat())
-        return {"route": context_route, "answer": answer, "context": context, "matches": [], "language": "en", "intent": "boarding"}
+        return {
+            "route": context_route,
+            "answer": answer,
+            "context": context,
+            "matches": [],
+            "language": "en",
+            "intent": "boarding",
+            "ui_type": "modal",
+            "ui_details": {
+                "title": "Boarding Recommendation",
+                "buttons": [{"label": "View Vehicle", "action": "ZOOM_VEHICLE", "value": context[0].get("vehicle_id") if context else ""}]
+            }
+        }
 
     suggestion_result = fleet_store.route_suggestions(
         query=query,
@@ -254,6 +331,11 @@ def get_no_api_recommendation(
             "matches": suggestion_result["matches"],
             "language": suggestion_result["language"],
             "intent": "trip_recommendation",
+            "ui_type": "modal",
+            "ui_details": {
+                "title": "Trip Recommendation",
+                "buttons": [{"label": "View Route", "action": "SHOW_ROUTE", "value": route}]
+            }
         }
 
     if not route:
@@ -267,17 +349,19 @@ def get_no_api_recommendation(
             "destination": suggestion_result["destination"],
             "matches": [],
             "language": suggestion_result["language"],
+            "ui_type": "message"
         }
 
     route_vehicles = [
         vehicle for vehicle in fleet_store.fleet()
-        if vehicle.route == route and (not country or fleet_store._vehicle_country(vehicle) == country)
+        if _vehicle_matches_route(vehicle, route) and (not country or fleet_store._vehicle_country(vehicle) == country)
     ]
     if not route_vehicles:
         return {
             "route": route,
             "answer": f"Ride Route {route}. No live vehicles are reporting for Route {route} yet, so wait for the next telemetry update before choosing a specific PUV.",
             "context": [],
+            "ui_type": "message"
         }
 
     ranked = sorted(route_vehicles, key=lambda vehicle: (_tier_penalty(vehicle.tier), vehicle.eta_minutes))
@@ -298,4 +382,9 @@ def get_no_api_recommendation(
         "route": route,
         "answer": answer,
         "context": [model_to_dict(vehicle) for vehicle in ranked],
+        "ui_type": "modal",
+        "ui_details": {
+            "title": "Route Suggestion",
+            "buttons": [{"label": "View Route", "action": "SHOW_ROUTE", "value": route}]
+        }
     }

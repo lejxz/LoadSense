@@ -125,7 +125,12 @@ def get_llm_recommendation(
             "context": ui_context,
             "matches": [],
             "language": "en",
-            "intent": "llm_response"
+            "intent": "llm_response",
+            "ui_type": "modal" if ui_context else "message",
+            "ui_details": {
+                "title": "Assistant Response",
+                "buttons": [{"label": "View Details", "action": "SHOW_ROUTE", "value": target_route}] if target_route else []
+            } if ui_context else {}
         }
 
     except Exception as e:

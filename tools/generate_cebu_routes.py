@@ -11,6 +11,8 @@ CEBU_ROUTES = [
     {"id": "PH-MYBUS1", "name": "MyBus SM City - Airport", "type": "BUS", "origin": (10.3115, 123.9182), "dest": (10.3251, 123.9781), "tag": "MYBUS"},
     {"id": "PH-MYBUS2", "name": "MyBus SM Seaside - SM City", "type": "BUS", "origin": (10.2811, 123.8811), "dest": (10.3115, 123.9182), "tag": "MYBUS"},
     {"id": "PH-MYBUS3", "name": "MyBus Talisay - SM Seaside", "type": "BUS", "origin": (10.2580, 123.8340), "dest": (10.2811, 123.8811), "tag": "MYBUS"},
+    {"id": "PH-MYBUS4", "name": "MyBus Minglanilla - SM Seaside", "type": "BUS", "origin": (10.2450, 123.7960), "dest": (10.2811, 123.8811), "tag": "MYBUS"},
+    {"id": "PH-MYBUS5", "name": "MyBus Minglanilla - SM City", "type": "BUS", "origin": (10.2450, 123.7960), "dest": (10.3115, 123.9182), "tag": "MYBUS"},
     {"id": "PH-CERES-S", "name": "Ceres Cebu - Carcar", "type": "BUS", "origin": (10.2981, 123.8941), "dest": (10.1065, 123.6391), "tag": "CERES-S"},
     {"id": "PH-CERES-N", "name": "Ceres Cebu - Danao", "type": "BUS", "origin": (10.3155, 123.9215), "dest": (10.5120, 124.0250), "tag": "CERES-N"},
     

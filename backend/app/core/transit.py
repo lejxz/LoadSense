@@ -26,6 +26,13 @@ NOMINATIM_SEARCH_URL = "https://nominatim.openstreetmap.org/search"
 REMOTE_CONTEXT_RADIUS_METERS = 80_000.0
 PHOTON_CACHE_TTL_SECONDS = 300.0
 _PHOTON_CACHE: dict[tuple[Any, ...], tuple[float, list[dict[str, Any]]]] = {}
+COUNTRY_SEARCH_NAMES = {
+    "ID": "Indonesia",
+    "MY": "Malaysia",
+    "PH": "Philippines",
+    "TH": "Thailand",
+    "VN": "Vietnam",
+}
 
 
 def _stop(name: str, latitude: float, longitude: float) -> dict[str, Any]:
@@ -216,6 +223,7 @@ def search_places(
         for place in _local_places(routes)
         if _place_alias_matches(place, needle)
     ]
+    local_results.sort(key=lambda place: _place_result_rank(place, needle))
     remote_results = search_remote_places(
         query,
         limit=limit,
@@ -225,10 +233,15 @@ def search_places(
         country=country,
     ) if include_remote else []
     if country:
-        target = country.lower()
+        target = _country_search_name(country).lower()
+        target_code = country.lower()
         remote_results = [
             p for p in remote_results 
-            if not p.get("country") or target in str(p.get("country")).lower()
+            if (
+                not p.get("country")
+                or target in str(p.get("country")).lower()
+                or str((p.get("address") or {}).get("countrycode") or "").lower() == target_code
+            )
         ]
     return _attach_place_labels(_dedupe_places(local_results + remote_results))[:limit]
 
@@ -252,13 +265,18 @@ def _local_places(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
                lower_name.startswith("point "):
                 continue
 
+            display_name = _local_place_display_name(name, city)
+            aliases = [route_id, route_name, city]
+            if display_name != name:
+                aliases.append(name)
+
             places.append({
-                "name": name,
+                "name": display_name,
                 "city": city,
                 "country": country,
                 "latitude": float(point["latitude"]),
                 "longitude": float(point["longitude"]),
-                "aliases": [route_id, route_name, city],
+                "aliases": aliases,
                 "kind": _infer_local_place_kind(name),
                 "route": route_id,
                 "route_name": route_name,
@@ -269,7 +287,10 @@ def _local_places(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _place_alias_matches(place: dict[str, Any], needle: str) -> bool:
     terms = [place.get("name", ""), *(place.get("aliases") or [])]
-    return any(normalize_text(term) == needle or needle in normalize_text(term) for term in terms)
+    if any(normalize_text(term) == needle or needle in normalize_text(term) for term in terms):
+        return True
+    haystack = normalize_text(" ".join([place.get("name", ""), place.get("city", ""), *(place.get("aliases") or [])]))
+    return _text_match_score(needle, haystack) >= 100
 
 
 def _infer_local_place_kind(name: str) -> str:
@@ -285,6 +306,16 @@ def _infer_local_place_kind(name: str) -> str:
     return "barangay"
 
 
+def _local_place_display_name(name: str, city: str) -> str:
+    normalized = normalize_text(name)
+    city_normalized = normalize_text(city)
+    if city_normalized == "cebu" and normalized == "ayala":
+        return "Ayala Center Cebu"
+    if city_normalized == "cebu" and normalized in {"basak", "sm city"}:
+        return f"{name} Cebu"
+    return name
+
+
 def search_remote_places(
     query: str,
     limit: int = 8,
@@ -295,9 +326,17 @@ def search_remote_places(
 ) -> list[dict[str, Any]]:
     if limit <= 0:
         return []
-    if country and country.lower() not in query.lower():
-        query = f"{query} {country}"
+    country_name = _country_search_name(country)
+    if country_name and country_name.lower() not in query.lower():
+        query = f"{query} {country_name}"
     return _search_photon_places(query, limit, context_latitude, context_longitude, context_text)
+
+
+def _country_search_name(country: Optional[str]) -> str:
+    raw = str(country or "").strip()
+    if not raw:
+        return ""
+    return COUNTRY_SEARCH_NAMES.get(raw.upper(), raw)
 
 
 def _search_photon_places(
@@ -532,6 +571,9 @@ def _place_subtitle(place: dict[str, Any]) -> str:
 def extract_destination(query: str, routes: list[dict[str, Any]], explicit_destination: str = "") -> str:
     if explicit_destination.strip():
         return explicit_destination.strip()
+    _, paired_destination = _extract_origin_destination_pair(query)
+    if paired_destination:
+        return paired_destination
     normalized = normalize_text(query)
     for pattern in DESTINATION_PATTERNS:
         match = re.search(pattern, normalized)
@@ -549,6 +591,9 @@ def extract_destination(query: str, routes: list[dict[str, Any]], explicit_desti
 def extract_origin(query: str, explicit_origin: str = "") -> str:
     if explicit_origin.strip() and normalize_text(explicit_origin) not in {"current location", "my location", "here"}:
         return explicit_origin.strip()
+    paired_origin, _ = _extract_origin_destination_pair(query)
+    if paired_origin:
+        return paired_origin
     normalized = normalize_text(query)
     for pattern in ORIGIN_PATTERNS:
         match = re.search(pattern, normalized)
@@ -633,6 +678,7 @@ def find_transit_suggestions(
     answer = format_suggestion_answer(
         language, origin, destination, suggestions, matches,
         no_route_found=no_route_found,
+        extracted_destination_text=extracted_destination,
     )
     return {
         "language": language,
@@ -834,6 +880,17 @@ def find_matching_routes(
     ))
     return matches[:12]
 
+
+def _display_stop_name(name: str) -> str:
+    name = str(name).strip()
+    lower_name = name.lower()
+    if not name or lower_name in ["origin", "end", "end of route", "waypoint", "turn", "destination"]:
+        return "Intersection"
+    if lower_name.startswith("stop "):
+        return "Street corner"
+    return name
+
+
 def find_multi_leg_routes(
     origin: Optional[dict[str, Any]],
     destination: Optional[dict[str, Any]],
@@ -899,7 +956,7 @@ def find_multi_leg_routes(
                         }
                     ],
                     "route": f"{r1.get('route')} to {r2.get('route')}",
-                    "route_name": f"Transfer at {p1['name']}",
+                    "route_name": f"Transfer at {_display_stop_name(p1.get('name', ''))}",
                     "city": r1.get("city") or infer_city(r1.get("polyline", []), r1.get("name", "")),
                     "zone": r1.get("zone", ""),
                     "direction": "multi",
@@ -959,8 +1016,16 @@ def format_suggestion_answer(
     suggestions: list[dict[str, Any]],
     matches: list[dict[str, Any]],
     no_route_found: bool = False,
+    extracted_destination_text: str = "",
 ) -> str:
     if not destination:
+        if extracted_destination_text:
+            if language == "tl":
+                return f"Hindi ko mahanap ang lokasyon na '{extracted_destination_text}'. Pakisubukang gumamit ng mas kilalang lugar o landmark."
+            if language == "ceb":
+                return f"Wala nako makit-i ang lokasyon nga '{extracted_destination_text}'. Palihug gamit og mas ilado nga lugar o landmark."
+            return f"I couldn't find the location '{extracted_destination_text}'. Please try using a more well-known place or landmark."
+        
         if language == "tl":
             return "Sabihin mo ang destinasyon mo para mahanap ko ang tamang ruta."
         if language == "ceb":
@@ -1054,28 +1119,28 @@ def format_suggestion_answer(
     if language == "tl":
         return (
             f"Pinakamagandang sakyan: Ruta {best['route']} ({best['route_name']}), PUV {best['vehicle_id']}. "
-            f"Sumakay malapit sa {best['boarding_stop']['name']} at bumaba malapit sa {best['alighting_stop']['name']}. "
+            f"Sumakay malapit sa {_display_stop_name(best['boarding_stop']['name'])} at bumaba malapit sa {_display_stop_name(best['alighting_stop']['name'])}. "
             f"Nasa {best['distance_km']:.1f} km ito mula sa iyo at darating sa ~{best['eta_minutes']:.0f} minuto. "
             f"Tantyang pamasahe: PHP {best['fare_pesos']}.{crowd_note}"
         )
     if language == "ceb":
         return (
             f"Pinakamaayong sakyan: Ruta {best['route']} ({best['route_name']}), PUV {best['vehicle_id']}. "
-            f"Sakay duol sa {best['boarding_stop']['name']} ug naog duol sa {best['alighting_stop']['name']}. "
+            f"Sakay duol sa {_display_stop_name(best['boarding_stop']['name'])} ug naog duol sa {_display_stop_name(best['alighting_stop']['name'])}. "
             f"Mga {best['distance_km']:.1f} km kini gikan nimo ug moabot sa ~{best['eta_minutes']:.0f} minuto. "
             f"Banabana nga plete: PHP {best['fare_pesos']}.{crowd_note}"
         )
     if language == "ilo":
         return (
             f"Pinakamaayo nga sakyan: Ruta {best['route']} ({best['route_name']}), PUV {best['vehicle_id']}. "
-            f"Sakay malapit sa {best['boarding_stop']['name']} kag naog malapit sa {best['alighting_stop']['name']}. "
+            f"Sakay malapit sa {_display_stop_name(best['boarding_stop']['name'])} kag naog malapit sa {_display_stop_name(best['alighting_stop']['name'])}. "
             f"Mga {best['distance_km']:.1f} km ini halin sa imo kag maabot sa ~{best['eta_minutes']:.0f} minuto. "
             f"Ginalantaw nga plete: PHP {best['fare_pesos']}.{crowd_note}"
         )
     if language == "ilocano":
         return (
             f"Nasayaat a pagpilian: Ruta {best['route']} ({best['route_name']}), PUV {best['vehicle_id']}. "
-            f"Sakay iti asideg ti {best['boarding_stop']['name']} ket bumaba iti asideg ti {best['alighting_stop']['name']}. "
+            f"Sakay iti asideg ti {_display_stop_name(best['boarding_stop']['name'])} ket bumaba iti asideg ti {_display_stop_name(best['alighting_stop']['name'])}. "
             f"Agarup {best['distance_km']:.1f} km manipud kenka ken umay iti ~{best['eta_minutes']:.0f} minuto. "
             f"Karkulo a bayad: PHP {best['fare_pesos']}.{crowd_note}"
         )
@@ -1083,8 +1148,8 @@ def format_suggestion_answer(
         f"Destination: {destination['name']}\n"
         f"Recommended route: {best['route']} ({best.get('route_type', 'PUV')}) - {best['route_name']}\n"
         f"PUV to board: {best['vehicle_id']} ({best.get('tier', 'active').replace('_', ' ')})\n"
-        f"Board near: {best['boarding_stop']['name']}\n"
-        f"Alight near: {best['alighting_stop']['name']}\n"
+        f"Board near: {_display_stop_name(best['boarding_stop']['name'])}\n"
+        f"Alight near: {_display_stop_name(best['alighting_stop']['name'])}\n"
         f"Arrival: ~{best['eta_minutes']:.0f} min ({best['distance_km']:.1f} km from you)\n"
         f"Estimated fare: PHP {best['fare_pesos']}.{crowd_note}"
     )
@@ -1224,6 +1289,8 @@ def _rank_vehicles_for_matches(
             direction_score = _direction_alignment_score(vehicle, match)
             route_applicability = float(match.get("route_applicability") or 0.0)
             route_distance_km = float(match.get("route_distance_km") or 0.0)
+            destination_walk_meters = float(match.get("destination_walk_meters") or 0.0)
+            walking_distance_meters = float(match.get("walking_distance_meters") or 0.0)
             # Suitability: higher is better
             suitability = (
                 route_applicability * 1200.0         # prefer routes that closely fit the trip
@@ -1231,6 +1298,8 @@ def _rank_vehicles_for_matches(
                 + max(0.0, 160.0 - eta * 12.0)       # prefer nearby vehicles (ETA)
                 + max(0.0, 120.0 - crowd_ratio * 120.0)  # prefer less-crowded
                 - safety_penalty * 900.0             # heavy penalty for deviated vehicles
+                - destination_walk_meters * 0.18      # do not trade a bad alighting point for a live PUV
+                - walking_distance_meters * 0.05      # prefer realistic boarding points
                 - route_distance_km * 30.0           # prefer shorter routes for short trips
             )
             all_candidates.append({
@@ -1631,6 +1700,37 @@ def _clean_place_phrase(value: str) -> str:
     value = re.sub(r"\b(is at|is|at|sa)\b", " ", value)
     value = re.sub(r"\s+", " ", value).strip(" ?.,")
     return value
+
+
+def _extract_origin_destination_pair(query: str) -> tuple[str, str]:
+    normalized = normalize_text(query)
+    patterns = [
+        r"\b(?:go|going|travel|ride|commute|get|board|take)?\s*from\s+(.+?)\s+to\s+(.+)$",
+        r"\b(?:gikan|halin)\s+(.+?)\s+(?:paingon|padung|adto|pakadto|to)\s+(.+)$",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, normalized)
+        if not match:
+            continue
+        origin = _clean_place_phrase(match.group(1))
+        destination = _clean_destination(match.group(2))
+        if origin and destination:
+            return origin.title(), destination
+    return "", ""
+
+
+def _place_result_rank(place: dict[str, Any], needle: str) -> tuple[int, float, tuple[int, str, str]]:
+    name = normalize_text(str(place.get("name") or ""))
+    aliases = [normalize_text(str(alias)) for alias in place.get("aliases") or []]
+    if name == needle:
+        match_class = 0
+    elif name and (needle in name or name in needle):
+        match_class = 1
+    elif any(alias == needle for alias in aliases):
+        match_class = 2
+    else:
+        match_class = 3
+    return (match_class, -_place_search_score(place, needle, None, None, ""), _place_sort_key(place))
 
 
 def _route_center(points: list[dict[str, Any]]) -> Optional[dict[str, float]]:
