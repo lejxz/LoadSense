@@ -256,9 +256,10 @@ LoadSense/
 
 | Member | Role | GitHub |
 |---|---|---|
-| Kent (lejxz) | Backend, ML, edge simulation, lead | [@lejxz](https://github.com/lejxz) |
-| Perejan (hansandreperejan24-hash) | Frontend, operator console | [@hansandreperejan24-hash](https://github.com/hansandreperejan24-hash) |
-| Pycnosis | Frontend, commuter app | [@Pycnosis](https://github.com/Pycnosis) |
+| lejxz | Hacker (lead) | [@lejxz](https://github.com/lejxz) |
+| Perejan | Hustler | [@hansandreperejan24-hash](https://github.com/hansandreperejan24-hash) |
+| Pycnosis | Hacker | [@Pycnosis](https://github.com/Pycnosis) |
+| kent | Hipster |  |
 
 <!-- TODO: team.png — optional team photo or avatar row, save to docs/images/team.png. -->
 
@@ -292,4 +293,4 @@ See `CONCEPT.md` for the full roadmap and per-phase milestones.
 
 ## License
 
-No license has been declared yet. All rights are reserved by the contributors by default; contact the team for licensing inquiries. A permissive license (e.g. MIT) is recommended for future open-sourcing.
+See `LICENSE.md`
